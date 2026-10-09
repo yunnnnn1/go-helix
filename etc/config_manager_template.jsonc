@@ -1,0 +1,198 @@
+/* =============================================================================
+ * Go-Helix —— Manager 配置模板（带参数说明）
+ *
+ * 说明：
+ *   1. 本文件为 JSONC（JSON + // 注释），仅供「参考」。程序使用标准
+ *      encoding/json，不能直接加载注释；实际使用时请【删除所有注释】
+ *      另存为 config_manager.json。
+ *   2. 标注约定：[必填] 必须提供；[可选] 缺省时取「默认」一栏的值。
+ *   3. 时长字符串格式：数字 + 单位（s 秒 / m 分 / h 时），如 "60s"、"5m"。
+ *   4. 三个 Manager 节点使用【结构相同】的配置，仅 raft_id / raft_addr /
+ *      api_addr / bind_addr(单机调试时) 按节点区分。
+ * ========================================================================== */
+{
+  /* [必填] Manager/Agent、HTTP/gRPC 共享的 Bearer 密钥；
+     所有 Manager 与 Agent 节点必须完全一致。生产请用高强度随机值。 */
+  "auth_token": "secret-token-123",
+
+  /* ============================ Manager 主体 ============================ */
+  "manager": {
+
+    /* [可选] 主进程日志目录；留空 = 输出到 stdout。默认 ""(stdout) */
+    "log_dir": "/var/log/github.com/yunnnnn1/go-helix/manager",
+
+    /* [必填] HTTP API 监听地址（对外的集群查询/切换/控制台入口）。
+       多机部署建议 "0.0.0.0:8080"。 */
+    "bind_addr": "0.0.0.0:8080",
+
+    /* [必填] 本节点在 Raft 集群中的唯一 ID（如 node1/node2/node3）。 */
+    "raft_id": "node1",
+
+    /* [必填] Raft 日志与稳定状态的本地存储目录；各节点须不同且持久。 */
+    "raft_dir": "/data/raft",
+
+    /* [必填] 本节点 Raft 通信监听地址（host:port），供其他节点连接。 */
+    "raft_addr": "10.0.1.1:7000",
+
+    /* [必填] 本节点对外的 API 地址（host:port）；Follower 转发与
+       跨节点拉取日志时据此寻址。多机一般为真实 IP:8080。 */
+    "api_addr": "10.0.1.1:8080",
+
+    /* [可选] 是否启用二次交叉检查（经同集群其他 Slave 代连探测，
+       防止网络分区误切）。默认 false，生产建议 true。 */
+    "second_check": true,
+
+    /* [可选] Master 心跳多久未更新即视为过期。默认 "60s"。 */
+    "stale_timeout": "60s",
+
+    /* [可选] 单次健康检查/探活超时。默认 "2s"。 */
+    "check_timeout": "2s",
+
+    /* ---- 提升新主前的防脑裂门禁（Fencing）---- */
+    "fencing": {
+      /* [可选] 是否开启门禁。缺省(不写该块或 null) = true（安全默认）。 */
+      "enabled": true,
+      /* [可选] required(默认)：无法确认旧主已被隔离则【中止提升】(fail-closed)；
+         best_effort：无法确认时仅告警仍提升（旧行为）。 */
+      "mode": "required",
+      /* [可选] 隔离 + 回读 super_read_only 的尝试超时。默认 "3s"。 */
+      "timeout": "3s"
+    },
+
+    /* [可选] 是否开启 Prometheus /metrics 端点。
+       缺省(null) 或 true = 开启；显式 false 时 /metrics 返回 404。 */
+    "metrics_enabled": true,
+
+    /* [可选] 选主总超时。默认 "20s"。 */
+    "election_timeout": "20s",
+
+    /* [可选] WaitCatchup / GTID 数据补齐超时。默认 "30s"。 */
+    "catchup_timeout": "30s",
+
+    /* [可选] 切换成功后的集群静默期（防抖动重复切换）。默认 "5m"。 */
+    "silence_period": "5m",
+
+    /* [可选] 本 Manager 集群的服务层级 P0/P1/P2/P3，默认 "P3"。
+       集群内三节点必须一致（经 Raft KV manager/tier 校验，错配拒绝启动）；
+       P0 Manager 集群只管理已注册的 P0 业务集群。 */
+    "tier": "P3",
+
+    /* ---- 非扁平拓扑行为；三个开关缺省均为 true ---- */
+    "topology": {
+      /* [可选] true(默认)：失联/追不平的副本移出活跃拓扑，切换照常（RTO 优先）；
+         false：任一副本未收敛即中止提升（一致性优先）。 */
+      "detach_lost_replicas": true,
+      /* [可选] true(默认)：主故障只重挂直属副本、级联子树形状保持；
+         false：所有副本平铺重挂到新主。 */
+      "preserve_hierarchy": true,
+      /* [可选] true(默认)：带下游的中间主死亡时，自动提升一个下游顶替；
+         false：该场景仅告警。 */
+      "intermediate_master_recovery": true
+    },
+
+    /* [可选] 按集群的业务端点（VIP/域名）切换设置；
+       没有对应条目的集群不会触发端点 Hook。键为集群名。 */
+    "endpoint_switch": {
+      "cluster1": {
+        /* [可选] 端点类型：none | vip | domain。 */
+        "endpoint_type": "vip",
+        /* [可选] 业务接入的 VIP 或域名（通常已在 cluster_meta 持久化，
+           此处作兜底）。 */
+        "endpoint_value": "10.0.0.10",
+        /* [可选] 指定运行 Hook 的 Agent（host:port）；留空 = 新主所在主机。 */
+        "exec_host": "",
+        /* [可选] 非空时，Agent 执行前从此 URL 下载最新 Hook（见 agent 模板）。 */
+        "sync_url": "https://artifact.internal/hooks/endpoint_hook?cluster=cluster1&version=latest",
+        /* [可选] 同步文件的期望 SHA256；留空不校验。 */
+        "sha256": "",
+        /* [可选] 单次 Hook（同步+执行）超时。默认 "15s"。 */
+        "timeout": "15s",
+        /* [可选] true：Hook 任一环节失败即 fail-closed（P0 集群建议 true）。 */
+        "required": true
+      }
+    },
+
+    /* [必填] 所有节点【内容一致】的期望成员清单（种子列表）。
+       用途：① 启动免 CLI 参数自动入群；② 全新集群仅 raft_peers[0]
+       执行 Bootstrap（防多节点各自建群）；③ 解析 Leader API 地址做转发。
+       运行时实际成员关系仍以 Raft Configuration 为准。 */
+    "raft_peers": [
+      { "node_id": "node1", "raft_addr": "10.0.1.1:7000", "api_addr": "10.0.1.1:8080" },
+      { "node_id": "node2", "raft_addr": "10.0.1.2:7000", "api_addr": "10.0.1.2:8080" },
+      { "node_id": "node3", "raft_addr": "10.0.1.3:7000", "api_addr": "10.0.1.3:8080" }
+    ]
+  },
+
+  /* ============================= Monitor =============================== */
+  "monitor": {
+    /* [可选] 巡检周期。默认 "3s"。 */
+    "interval": "3s",
+    /* [可选] 并发故障调查/切换的 Worker 数量。默认 10。 */
+    "worker_pool_size": 10
+  },
+
+  /* ======================== 元数据库（MetaDB）========================= */
+  "datacenter": {
+    /* [可选] 元数据库类型：mysql(默认) | sqlite。 */
+    "type": "mysql",
+
+    /* —— type=mysql 时填写 —— */
+    "host": "10.0.0.3",        // [必填-mysql] MetaDB 主机
+    "port": 3306,              // [可选] 默认 3306
+    "user": "mha_admin",       // [必填-mysql] MetaDB 账号
+    "password": "***",         // [必填-mysql] MetaDB 口令
+    "dbname": "dc",            // [必填-mysql] 元数据库名
+
+    /* —— type=sqlite 时填写（与上面 TCP 字段二选一，自动建表）—— */
+    "path": "/var/lib/github.com/yunnnnn1/go-helix/metadata.db",
+
+    /* [可选] 建立连接/握手超时。默认 "5s"。 */
+    "timeout": "5s",
+    /* [可选] 连接池：最大打开连接数 / 最大空闲连接数。默认 10 / 5。 */
+    "max_open_conns": 10,
+    "max_idle_conns": 5,
+    /* [可选] 连接最大存活时间。默认 "5m"。 */
+    "conn_max_lifetime": "5m"
+  },
+
+  /* ============================== 告警 =================================
+     只有「总开关 enabled=true」且对应渠道 enabled=true、配置完整时才投递。 */
+  "notify": {
+    /* [可选] 总开关；false 时所有渠道（含切换生命周期事件）完全静默。
+       默认 false；要收切换通知须在切换前开启。 */
+    "enabled": true,
+
+    /* ---- 邮件（SMTP）---- */
+    "email": {
+      "enabled": true,                       // [可选] 该渠道开关
+      "host": "smtp.example.com",            // [必填-启用] SMTP 主机
+      "port": 465,                           // [可选] 465 隐式 TLS / 587·25 STARTTLS
+      "username": "helix",                   // [可选] 登录用户名，留空=不认证
+      "password": "***",                     // [可选] 登录口令（不写日志）
+      "from": "helix@example.com",           // [必填-启用] 发件人
+      "to": ["dba@example.com"],             // [必填-启用] 收件人列表
+      "use_tls": true                        // [可选] true=强制隐式 TLS(465)
+    },
+
+    /* ---- 企业微信群机器人（key 在 URL 内，无需加签）---- */
+    "wechat": {
+      "enabled": true,
+      "url": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=<KEY>",
+      "secret": ""                            // 企业微信不使用，留空
+    },
+
+    /* ---- 钉钉群机器人（启用「加签」时填 secret）---- */
+    "dingtalk": {
+      "enabled": true,
+      "url": "https://oapi.dingtalk.com/robot/send?access_token=<TOKEN>",
+      "secret": "SEC***"                      // [可选] HMAC-SHA256 加签密钥
+    },
+
+    /* ---- 飞书群机器人（启用「加签」时填 secret）---- */
+    "feishu": {
+      "enabled": false,
+      "url": "https://open.feishu.cn/open-apis/bot/v2/hook/<TOKEN>",
+      "secret": ""                            // [可选] HMAC-SHA256 加签密钥
+    }
+  }
+}

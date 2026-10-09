@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>go-helix 高可用控制台</title>
+  <link rel="stylesheet" href="style.css?v=20261009e" />
+  <script>
+    /* 首屏渲染前按本地偏好设定主题，避免白/黑切换闪烁；
+       缺省（未显式选择过黑色）为白色主题。 */
+    try {
+      if (localStorage.getItem("gohelix_theme") === "dark") {
+        document.documentElement.setAttribute("data-theme", "dark");
+      }
+    } catch (e) {}
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">◈</span>
+      <div>
+        <h1>go-helix 控制台</h1>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span id="connBadge" class="badge badge-muted">连接中…</span>
+      <label class="switch" title="自动刷新">
+        <input type="checkbox" id="autoRefresh" checked />
+        <span class="slider"></span>
+        <em>自动刷新</em>
+      </label>
+      <button id="btnTheme" class="btn btn-ghost btn-icon" title="切换主题"></button>
+      <button id="btnToken" class="btn btn-ghost">Token</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-view="clusters">数据库集群</button>
+    <button class="tab" data-view="managers">Manager 集群</button>
+    <button class="tab" data-view="switchlogs">切换日志</button>
+    <button class="tab" data-view="audit">审计日志</button>
+    <button class="tab" data-view="hosttools">主机工具</button>
+    <button class="tab" data-view="notify">告警通知</button>
+  </nav>
+
+  <main class="content">
+    <!-- 数据库集群视图 -->
+    <section id="view-clusters" class="view active">
+      <div class="toolbar">
+        <h2>受管数据库集群</h2>
+        <span class="muted">拓扑策略按集群独立配置，展开卡片查看与编辑。</span>
+        <button class="btn btn-ghost" id="btnRefreshClusters">刷新</button>
+      </div>
+      <div id="clusterList" class="cluster-grid">
+        <div class="loading">加载中…</div>
+      </div>
+    </section>
+
+    <!-- Manager 集群视图 -->
+    <section id="view-managers" class="view">
+      <div class="toolbar">
+        <h2>Raft 共识集群</h2>
+        <span class="raft-tier-bar">
+          <span class="muted">服务层级：</span><span class="raft-tier badge badge-muted">-</span>
+        </span>
+        <button class="btn btn-ghost" id="btnRefreshManagers">刷新</button>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>节点</th>
+                <th>Raft 地址</th>
+                <th>API 地址</th>
+                <th>角色</th>
+                <th>投票权</th>
+                <th>在集群中</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="raftTableBody">
+              <tr><td colspan="7" class="loading">加载中…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 切换日志视图 -->
+    <section id="view-switchlogs" class="view">
+      <div class="toolbar">
+        <h2>切换日志</h2>
+        <div class="toolbar-filters">
+          <button class="btn" id="btnBackToClusters">← 返回集群</button>
+          <select id="switchlogKind" class="input input-sm">
+            <option value="">全部类型</option>
+            <option value="failover">紧急切换</option>
+            <option value="switchover">计划切换</option>
+            <option value="topology">重建拓扑</option>
+            <option value="rollback">回滚切换</option>
+            <option value="replica">恢复复制</option>
+          </select>
+          <input type="text" id="switchlogFilter" class="input input-sm" placeholder="按集群名过滤" />
+          <label class="check-inline" title="并发汇聚所有 Raft 节点上的切换日志">
+            <input type="checkbox" id="aggregateSwitchLogs" /> 跨节点汇聚
+          </label>
+          <button class="btn btn-ghost" id="btnRefreshSwitchLogs">刷新</button>
+        </div>
+      </div>
+
+      <div class="switchlog-layout">
+        <div class="card switchlog-list-card">
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr><th>类型</th><th>集群</th><th>日期</th><th>来源</th><th>操作</th></tr>
+              </thead>
+              <tbody id="switchlogList">
+                <tr><td colspan="5" class="loading">加载中…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card switchlog-content-card">
+          <div class="switchlog-content-head">
+            <span id="switchlogTitle" class="log-head-title">未选择日志</span>
+            <span class="head-right">
+              <span id="switchlogUpdated" class="updated-time" hidden></span>
+              <span id="switchlogLive" class="live-tag" hidden>实时</span>
+            </span>
+          </div>
+          <pre id="switchlogContent" class="log-pre">点击左侧条目查看切换日志</pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- 审计日志视图：操作审计 + 结构化切换记录（均随 Raft 复制） -->
+    <section id="view-audit" class="view">
+      <div class="toolbar">
+        <h2>审计日志</h2>
+        <div class="toolbar-filters">
+          <div class="segmented" id="auditSegment">
+            <button class="seg-btn active" data-seg="audit">操作审计</button>
+            <button class="seg-btn" data-seg="switch">切换记录</button>
+          </div>
+
+          <!-- 操作审计筛选 -->
+          <span class="seg-filters" data-seg-filters="audit">
+            <select id="auditCategory" class="input input-sm">
+              <option value="">全部类别</option>
+              <option value="lifecycle">生命周期</option>
+              <option value="config">配置编辑</option>
+              <option value="cluster">集群成员</option>
+              <option value="security">安全运维</option>
+            </select>
+          </span>
+
+          <!-- 切换记录筛选 -->
+          <span class="seg-filters" data-seg-filters="switch" hidden>
+            <select id="switchRecOperation" class="input input-sm">
+              <option value="">全部操作</option>
+              <option value="failover">紧急切换</option>
+              <option value="switchover">计划切换</option>
+              <option value="recover">恢复</option>
+            </select>
+          </span>
+
+          <button class="btn btn-ghost" id="btnRefreshAudit">刷新</button>
+        </div>
+      </div>
+
+      <!-- 操作审计表 -->
+      <div class="card" data-seg-panel="audit">
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>时间</th><th>类别</th><th>动作</th><th>集群</th>
+                <th>对象</th><th>结果</th><th>来源</th><th>详情</th>
+              </tr>
+            </thead>
+            <tbody id="auditTableBody">
+              <tr><td colspan="8" class="loading">加载中…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 结构化切换记录表 -->
+      <div class="card" data-seg-panel="switch" hidden>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>时间</th><th>集群</th><th>操作</th><th>旧主</th>
+                <th>新主</th><th>分析码</th><th>结果</th><th>执行节点</th>
+              </tr>
+            </thead>
+            <tbody id="switchRecordBody">
+              <tr><td colspan="8" class="loading">加载中…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 主机工具视图：流式命令执行 + 安全文件拉取 -->
+    <section id="view-hosttools" class="view">
+      <div class="toolbar">
+        <h2>主机运维工具</h2>
+        <span class="muted">经 Manager 代理到目标主机 Agent；命令受白名单约束，文件写入受限目录。</span>
+      </div>
+
+      <datalist id="clusterNameList"></datalist>
+
+      <div class="hosttools-grid">
+        <!-- 流式命令 -->
+        <div class="card hosttool-card">
+          <div class="hosttool-head">
+            <h3>流式命令执行</h3>
+            <span class="muted">支持 df / uptime / echo / ping / date / free</span>
+          </div>
+          <div class="hosttool-form">
+            <label class="field">
+              <span>集群</span>
+              <input type="text" id="esCluster" class="input" list="clusterNameList" placeholder="cluster1" />
+            </label>
+            <label class="field">
+              <span>目标节点（host 或 host:port）</span>
+              <input type="text" id="esNode" class="input" placeholder="10.37.38.43:3307" />
+            </label>
+            <div class="field-row">
+              <label class="field">
+                <span>命令</span>
+                <select id="esCommand" class="input">
+                  <option>df</option>
+                  <option>uptime</option>
+                  <option>echo</option>
+                  <option>ping</option>
+                  <option>date</option>
+                  <option>free</option>
+                </select>
+              </label>
+              <label class="field field-grow">
+                <span>参数（空格分隔）</span>
+                <input type="text" id="esArgs" class="input" placeholder="-h" />
+              </label>
+            </div>
+            <div class="hosttool-actions">
+              <button class="btn" id="btnExecStream">执行</button>
+              <button class="btn btn-ghost" id="btnExecStreamCancel" disabled>取消</button>
+              <span id="esStatus" class="muted"></span>
+            </div>
+          </div>
+          <pre id="esOutput" class="log-pre hosttool-output">命令输出将实时显示在这里</pre>
+        </div>
+
+        <!-- 安全文件拉取 -->
+        <div class="card hosttool-card">
+          <div class="hosttool-head">
+            <h3>安全文件拉取</h3>
+            <span class="muted">临时文件校验通过后原子改名落盘</span>
+          </div>
+          <div class="hosttool-form">
+            <label class="field">
+              <span>集群</span>
+              <input type="text" id="ffCluster" class="input" list="clusterNameList" placeholder="cluster1" />
+            </label>
+            <label class="field">
+              <span>目标节点（host 或 host:port）</span>
+              <input type="text" id="ffNode" class="input" placeholder="10.37.38.43:3307" />
+            </label>
+            <label class="field">
+              <span>源 URL（https；http 仅内网/回环）</span>
+              <input type="text" id="ffSourceUrl" class="input" placeholder="https://repo.example.com/pkg.tar.gz" />
+            </label>
+            <div class="field-row">
+              <label class="field field-grow">
+                <span>目标目录（需在 Agent 允许根内）</span>
+                <input type="text" id="ffTargetDir" class="input" placeholder="/data00/packages" />
+              </label>
+              <label class="field">
+                <span>文件名</span>
+                <input type="text" id="ffFilename" class="input" placeholder="pkg.tar.gz" />
+              </label>
+            </div>
+            <div class="field-row">
+              <label class="field field-grow">
+                <span>SHA256（可选，留空不校验）</span>
+                <input type="text" id="ffSha256" class="input" placeholder="64 位十六进制" />
+              </label>
+              <label class="field">
+                <span>大小上限（MB，0=默认）</span>
+                <input type="number" id="ffMaxBytes" class="input" value="1024" min="0" />
+              </label>
+              <label class="field">
+                <span>限速（KB/s，0=不限）</span>
+                <input type="number" id="ffLimitKbps" class="input" value="0" min="0" />
+              </label>
+            </div>
+            <div class="hosttool-actions">
+              <button class="btn" id="btnFetchFile">开始拉取</button>
+              <span id="ffStatus" class="muted"></span>
+            </div>
+          </div>
+          <pre id="ffOutput" class="log-pre hosttool-output">进度信息将显示在这里</pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- 告警通知视图 -->
+    <section id="view-notify" class="view">
+      <div class="toolbar">
+        <h2>告警通知</h2>
+        <span class="muted">配置经控制台编辑后由 Raft 同步并持久化（优先级高于 config_manager.json 的 notify 段）；也可直接发送测试通知。</span>
+        <button class="btn btn-ghost" id="btnRefreshNotify">刷新</button>
+      </div>
+
+      <div class="notify-wrap">
+        <div class="card notify-status-card">
+          <div class="notify-status-head">
+            <span class="notify-master-dot" id="notifyMasterDot"></span>
+            <strong id="notifyMasterState">-</strong>
+            <label class="switch" title="通知总开关">
+              <input type="checkbox" id="notifyMasterSwitch" />
+              <span class="slider"></span>
+            </label>
+            <button class="btn" id="btnTestAll">测试全部已启用渠道</button>
+          </div>
+          <p class="muted" id="notifyMasterHint"></p>
+        </div>
+
+        <div id="notifyChannelList" class="notify-channel-list">
+          <div class="loading">加载中…</div>
+        </div>
+
+        <div class="card">
+          <h3>最近一次测试结果</h3>
+          <div id="notifyTestResults" class="notify-test-results">尚未发送测试通知。</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Token 弹窗 -->
+  <div class="modal-mask" id="tokenModal">
+    <div class="modal">
+      <h3>设置访问 Token</h3>
+      <p class="muted">接口启用了 Bearer Token 校验，请输入 <code>auth_token</code>。仅保存在当前浏览器会话，不会写入服务器。</p>
+      <input type="password" id="tokenInput" class="input" placeholder="Bearer Token" autocomplete="off" />
+      <div class="modal-actions">
+        <button class="btn" id="tokenSave">保存并连接</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 确认弹窗 -->
+  <div class="modal-mask" id="confirmModal">
+    <div class="modal">
+      <h3 id="confirmTitle">确认操作</h3>
+      <p id="confirmBody"></p>
+      <label class="field">
+        <span>优选节点（可选，IP 或 IP:Port，留空自动选主）</span>
+        <input type="text" id="confirmPreferred" class="input" placeholder="例如 10.0.1.11:3308" autocomplete="off" />
+      </label>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="confirmCancel">取消</button>
+        <button class="btn btn-danger" id="confirmOk">确认执行</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 拓扑策略编辑弹窗 -->
+  <div class="modal-mask" id="topoPolicyModal">
+    <div class="modal">
+      <h3 id="topoPolicyTitle">编辑拓扑策略</h3>
+      <p class="muted">仅作用于所选集群；未单独配置时沿用配置文件默认值。保存后经 Raft 同步到全部 Manager 并持久化，重启或 Leader 切换不丢失。</p>
+
+      <label class="switch switch-block" title="开启：暂时连不上的从库先移出，切换照常进行，事后再处理；关闭：必须所有从库都就绪，否则不切换。">
+        <input type="checkbox" id="tpDetach" />
+        <span class="slider"></span>
+        <em>允许跳过暂不可用的从库（关：必须全部就绪才切换）</em>
+      </label>
+      <label class="switch switch-block" title="开启：主库故障时只把直接下级指向新主，多级复制的层级形状保持不变；关闭：所有从库一律直接挂到新主，恢复为一主多从。">
+        <input type="checkbox" id="tpPreserve" />
+        <span class="slider"></span>
+        <em>保留多级复制层级（关：所有从库直接挂新主）</em>
+      </label>
+      <label class="switch switch-block" title="开启：带下游从库的中间主故障时，自动选一个下游顶替它的位置。">
+        <input type="checkbox" id="tpIntermediate" />
+        <span class="slider"></span>
+        <em>中间主故障时自动选下游顶替</em>
+      </label>
+
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="tpCancel">取消</button>
+        <button class="btn" id="tpSave">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 接入端点编辑弹窗 -->
+  <div class="modal-mask" id="endpointModal">
+    <div class="modal">
+      <h3 id="endpointModalTitle">编辑接入端点</h3>
+      <p class="muted">选择业务连接数据库使用的固定入口类型；故障切换时由 hook 脚本把该入口指向新主。</p>
+
+      <div class="endpoint-type-options">
+        <label class="priority-option">
+          <input type="radio" name="endpointTypeOption" value="none" />
+          <span class="prio-dot prio-P3">无</span> 不启用固定端点
+        </label>
+        <label class="priority-option">
+          <input type="radio" name="endpointTypeOption" value="vip" />
+          <span class="prio-dot prio-P2">VIP</span> 浮动 IP
+        </label>
+        <label class="priority-option">
+          <input type="radio" name="endpointTypeOption" value="domain" />
+          <span class="prio-dot prio-P0">域名</span> 内网域名
+        </label>
+      </div>
+
+      <label class="field endpoint-value-field">
+        <span id="endpointValueLabel">端点值（VIP 或域名）</span>
+        <input type="text" id="endpointValueInput" placeholder="如 10.0.0.1 或 cluster1.db.internal" autocomplete="off" />
+      </label>
+
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="endpointCancel">取消</button>
+        <button class="btn" id="endpointSave">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 集群优先级弹窗 -->
+  <div class="modal-mask" id="priorityModal">
+    <div class="modal">
+      <h3 id="priorityModalTitle">修改集群优先级</h3>
+      <p class="muted">优先级按集群生效；P0 集群需先注册并由 P0 Manager 集群管理，切换走强一致流程。</p>
+      <div class="priority-options">
+        <label class="priority-option"><input type="radio" name="priorityOption" value="P0" /> <span class="prio-dot prio-P0">P0</span> 最高：强一致故障切换</label>
+        <label class="priority-option"><input type="radio" name="priorityOption" value="P1" /> <span class="prio-dot prio-P1">P1</span> 高优先级</label>
+        <label class="priority-option"><input type="radio" name="priorityOption" value="P2" /> <span class="prio-dot prio-P2">P2</span> 普通优先级</label>
+        <label class="priority-option"><input type="radio" name="priorityOption" value="P3" /> <span class="prio-dot prio-P3">P3</span> 默认</label>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="priorityCancel">取消</button>
+        <button class="btn" id="prioritySave">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 通知渠道编辑弹窗 -->
+  <div class="modal-mask" id="notifyEditModal">
+    <div class="modal">
+      <h3 id="notifyEditTitle">编辑通知渠道</h3>
+      <p class="muted">仅修改所选渠道；登录口令、加签密钥与 Webhook 地址留空表示保持现有值。保存后经 Raft 同步到全部 Manager 并持久化。</p>
+
+      <label class="switch switch-block">
+        <input type="checkbox" id="neEnabled" />
+        <span class="slider"></span>
+        <em>启用该渠道</em>
+      </label>
+
+      <!-- 邮件字段 -->
+      <div id="neEmailFields" class="notify-edit-fields" hidden>
+        <div class="field-row">
+          <label class="field field-grow"><span>SMTP 主机</span><input type="text" id="neHost" class="input" placeholder="smtp.example.com" /></label>
+          <label class="field"><span>端口</span><input type="number" id="nePort" class="input" placeholder="465" /></label>
+        </div>
+        <div class="field-row">
+          <label class="field field-grow"><span>登录用户名（留空不认证）</span><input type="text" id="neUsername" class="input" /></label>
+          <label class="field field-grow"><span>登录口令</span><input type="password" id="nePassword" class="input" placeholder="留空保持不变" autocomplete="new-password" /></label>
+        </div>
+        <label class="field"><span>发件人地址</span><input type="text" id="neFrom" class="input" /></label>
+        <label class="field"><span>收件人（每行一个，或英文逗号分隔）</span><textarea id="neTo" class="input" rows="3"></textarea></label>
+        <label class="switch switch-block">
+          <input type="checkbox" id="neUseTLS" />
+          <span class="slider"></span>
+          <em>隐式 TLS（465）；关闭则用 STARTTLS（587/25）</em>
+        </label>
+      </div>
+
+      <!-- 群机器人字段 -->
+      <div id="neWebhookFields" class="notify-edit-fields" hidden>
+        <label class="field"><span>Webhook 地址</span><input type="text" id="neURL" class="input" placeholder="留空保持现有地址" /></label>
+        <label class="field"><span>加签密钥（钉钉 / 飞书可选）</span><input type="text" id="neSecret" class="input" placeholder="留空保持现有密钥" /></label>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="neCancel">取消</button>
+        <button class="btn" id="neSave">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast 容器 -->
+  <div id="toastBox" class="toast-box"></div>
+
+  <!-- =============================================================== -->
+  <!-- 可复用 DOM 模板：app.js 通过 cloneNode 复制并填充，不再在 JS 中  -->
+  <!-- 拼接 HTML 字符串。模板内容不会被渲染到页面。                     -->
+  <!-- =============================================================== -->
+
+  <!-- 通用徽标 / 角色标签 -->
+  <template id="tpl-badge"><span class="badge"></span></template>
+  <template id="tpl-role-tag"><span class="role-tag"></span></template>
+
+  <!-- 集群卡片骨架 -->
+  <template id="tpl-cluster-card">
+    <div class="cluster-card">
+      <div class="cluster-head">
+        <div>
+          <h3><span class="card-health"></span> <span class="card-name"></span> <span class="card-priority" data-priority title="点击修改集群优先级"></span></h3>
+          <div class="cluster-meta"></div>
+        </div>
+        <span class="chev">▾</span>
+      </div>
+      <div class="cluster-body">
+        <div class="card-policy">
+          <span class="card-policy-label">接入端点</span>
+          <span class="card-policy-badges card-endpoint-badges"><span class="badge badge-muted">-</span></span>
+          <button class="btn btn-sm btn-ghost" data-act="edit-endpoint">编辑端点</button>
+        </div>
+        <div class="card-policy card-topology">
+          <span class="card-policy-label card-topology-title">拓扑策略</span>
+          <label class="switch switch-block topology-row" title="开启：暂时连不上的从库先移出，切换照常，事后处理；关闭：必须所有从库就绪，否则不切换。">
+            <em class="topology-row-label">跳过不可用从库</em>
+            <input type="checkbox" class="tp-card-toggle" data-policy="detach" />
+            <span class="slider"></span>
+          </label>
+          <label class="switch switch-block topology-row" title="开启：只把直接下级指向新主，多级复制层级保持不变；关闭：所有从库直接挂新主。">
+            <em class="topology-row-label">保留多级层级</em>
+            <input type="checkbox" class="tp-card-toggle" data-policy="preserve" />
+            <span class="slider"></span>
+          </label>
+          <label class="switch switch-block topology-row" title="开启：中间主故障时自动选一个下游顶替。">
+            <em class="topology-row-label">中间主自动顶替</em>
+            <input type="checkbox" class="tp-card-toggle" data-policy="intermediate" />
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="topo"></div>
+        <div class="node-table-wrap">
+          <table class="node-table">
+            <thead>
+              <tr><th>地址</th><th>角色</th><th>状态</th><th>版本</th></tr>
+            </thead>
+            <tbody class="detail-body">
+              <tr><td colspan="4" class="loading">加载中…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="cluster-actions">
+          <button class="btn btn-sm btn-danger" data-act="failover">紧急切换</button>
+          <button class="btn btn-sm" data-act="switchover">计划切换</button>
+          <button class="btn btn-sm btn-ghost" data-act="rebuild">重建拓扑</button>
+          <button class="btn btn-sm btn-ghost" data-act="rollback">回滚切换</button>
+          <button class="btn btn-sm btn-ghost" data-act="recover-replica">恢复复制</button>
+        </div>
+      </div>
+    </div>
+  </template>
+  <template id="tpl-cluster-empty">
+    <div class="empty">暂无受管集群，请确认 Agent 已上报心跳</div>
+  </template>
+
+  <!-- 拓扑节点 / 拓扑树 -->
+  <template id="tpl-topo-node">
+    <div class="topo-node">
+      <div class="topo-node-head">
+        <span class="topo-dot"></span>
+        <span class="topo-node-role"></span>
+      </div>
+      <div class="topo-node-addr"></div>
+      <div class="topo-node-meta"></div>
+    </div>
+  </template>
+  <template id="tpl-topo-tree">
+    <ul class="topo-tree">
+      <li><div class="topo-roots"></div></li>
+    </ul>
+  </template>
+
+  <!-- 节点详情表 -->
+  <template id="tpl-node-row">
+    <tr>
+      <td class="cell-addr addr"></td>
+      <td class="cell-role"><span class="role-tag"></span></td>
+      <td class="cell-status"></td>
+      <td class="cell-version"></td>
+    </tr>
+  </template>
+  <template id="tpl-node-empty">
+    <tr><td colspan="4" class="empty">无节点数据</td></tr>
+  </template>
+
+  <!-- Raft 节点表 -->
+  <template id="tpl-raft-row">
+    <tr>
+      <td class="cell-node"><strong class="node-id"></strong><span class="self-note muted" hidden></span></td>
+      <td class="cell-raft-addr addr"></td>
+      <td class="cell-api-addr addr"></td>
+      <td class="cell-role"></td>
+      <td class="cell-suffrage"></td>
+      <td class="cell-incluster"></td>
+      <td class="cell-op"></td>
+    </tr>
+  </template>
+  <template id="tpl-raft-empty">
+    <tr><td colspan="7" class="empty">暂无 Raft 节点数据</td></tr>
+  </template>
+  <template id="tpl-remove-btn">
+    <button class="btn btn-sm btn-danger" data-leave>移除</button>
+  </template>
+  <template id="tpl-remove-btn-disabled">
+    <button class="btn btn-sm btn-ghost" disabled>移除</button>
+  </template>
+
+  <!-- 切换日志列表 -->
+  <template id="tpl-switchlog-row">
+    <tr class="switchlog-row">
+      <td class="cell-kind"></td>
+      <td class="cell-cluster"><strong></strong></td>
+      <td class="cell-date"></td>
+      <td class="cell-source addr"></td>
+      <td class="cell-op"></td>
+    </tr>
+  </template>
+  <template id="tpl-switchlog-empty">
+    <tr><td colspan="5" class="empty">暂无切换日志</td></tr>
+  </template>
+  <template id="tpl-view-btn">
+    <button class="btn btn-sm btn-ghost" data-view-log>查看</button>
+  </template>
+
+  <!-- 操作审计列表 -->
+  <template id="tpl-audit-row">
+    <tr>
+      <td class="cell-time"></td>
+      <td class="cell-category"></td>
+      <td class="cell-action mono-cell"></td>
+      <td class="cell-cluster"></td>
+      <td class="cell-target addr"></td>
+      <td class="cell-result"></td>
+      <td class="cell-source addr"></td>
+      <td class="cell-detail"></td>
+    </tr>
+  </template>
+  <template id="tpl-audit-empty">
+    <tr><td colspan="8" class="empty">暂无审计日志</td></tr>
+  </template>
+
+  <!-- 结构化切换记录列表 -->
+  <template id="tpl-switch-record-row">
+    <tr>
+      <td class="cell-time"></td>
+      <td class="cell-cluster"><strong></strong></td>
+      <td class="cell-operation"></td>
+      <td class="cell-old addr"></td>
+      <td class="cell-new addr"></td>
+      <td class="cell-code mono-cell"></td>
+      <td class="cell-result"></td>
+      <td class="cell-node"></td>
+    </tr>
+  </template>
+  <template id="tpl-switch-record-empty">
+    <tr><td colspan="8" class="empty">暂无切换记录</td></tr>
+  </template>
+
+  <!-- 回滚预检预览 -->
+  <template id="tpl-pf-banner"><div class="pf-banner"></div></template>
+  <template id="tpl-pf-record"><div class="pf-record"></div></template>
+  <template id="tpl-pf-nodes"><div class="pf-nodes"></div></template>
+  <template id="tpl-pf-node">
+    <div class="pf-node">
+      <div class="pf-node-title"></div>
+      <div class="pf-node-addr"></div>
+      <div class="pf-node-body"></div>
+    </div>
+  </template>
+  <template id="tpl-pf-miss"><div class="pf-miss">节点不存在 / 已移除</div></template>
+  <template id="tpl-pf-checks"><ul class="pf-checks"></ul></template>
+  <template id="tpl-pf-check">
+    <li><span class="pf-icon"></span> <span class="pf-check-name"></span> <span class="pf-check-detail"></span></li>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>

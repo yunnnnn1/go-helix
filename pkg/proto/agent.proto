@@ -1,0 +1,237 @@
+syntax = "proto3";
+
+package proto;
+
+option go_package = "github.com/yunnnnn1/go-helix/pkg/proto";
+
+service DBAgent {
+  // Check health
+  rpc Ping (PingRequest) returns (PingResponse) {}
+
+  // Kill a specific process (Database process or generic PID)
+  rpc KillProcess (KillProcessRequest) returns (KillProcessResponse) {}
+
+  // Get generic status of the database
+  rpc GetStatus (GetStatusRequest) returns (GetStatusResponse) {}
+
+  // Execute a generic operation (for plugin extensibility)
+  rpc ExecuteOperation (OperationRequest) returns (OperationResponse) {}
+
+  // Execute a shell command
+  rpc ExecuteShell (ShellRequest) returns (ShellResponse) {}
+
+  // Check if target host is reachable via SSH
+  rpc SSHCheck(SSHCheckRequest) returns (SSHCheckResponse) {}
+
+  // Get current disk usage percentage of the DB directory
+  rpc GetDiskStatus(DiskStatusRequest) returns (DiskStatusResponse) {}
+
+  // Execute a specific plugin logic (e.g. gtid_sync)
+  rpc ExecutePlugin (PluginRequest) returns (PluginResponse) {}
+
+  // Execute a whitelisted command and stream its output line by line.
+  // Cancellable: if the client disconnects, the process is killed.
+  rpc ExecStream (ExecStreamRequest) returns (stream ExecStreamLine) {}
+
+  // Securely fetch a file from a source URL into a jailed target directory,
+  // with size cap, optional rate limit and SHA256 verification.
+  rpc FetchFile (FetchFileRequest) returns (stream FetchProgress) {}
+
+  // Stream the tail of this host's binary log files beyond the requested
+  // start position. Agent-native equivalent of MHA save_binary_logs: files
+  // are read locally from disk and remain available even when the database
+  // process itself is dead; no SSH trust is required.
+  rpc StreamBinlogTail (BinlogTailRequest) returns (stream BinlogChunk) {}
+
+  // Receive a rescued binary-log fragment, store it in a jailed temp file,
+  // apply it locally via mysqlbinlog|mysql and verify the resulting GTID set.
+  rpc ApplyBinlogRescue (stream BinlogRescueChunk) returns (BinlogRescueResult) {}
+
+  // Run the cluster's endpoint hook (VIP/domain switch). The agent may first
+  // sync the latest hook executable from a source URL, then executes it as
+  // the configured non-root user with a fixed argv protocol, and parses the
+  // hook's last stdout line as a structured JSON result.
+  rpc RunEndpointHook (EndpointHookRequest) returns (EndpointHookResult) {}
+}
+
+message PingRequest {}
+message PingResponse {
+  bool alive = 1;
+}
+
+message KillProcessRequest {
+  int64 process_id = 1; // Thread ID or OS PID
+  bool is_os_pid = 2;   // true if it's an OS level PID
+}
+
+message KillProcessResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message GetStatusRequest {}
+message GetStatusResponse {
+  // Key-Value map for flexible status reporting (e.g., "gtid_executed": "...", "role": "master")
+  map<string, string> status = 1;
+}
+
+message OperationRequest {
+  string operation = 1; // e.g., "StopSlave", "Switchover", "Checkpoint"
+  map<string, string> params = 2;
+}
+
+message OperationResponse {
+  bool success = 1;
+  string message = 2;
+  map<string, string> result = 3;
+}
+
+message ShellRequest {
+  string command = 1;
+  repeated string args = 2;
+  int32 timeout_seconds = 3;
+}
+
+message ShellResponse {
+  bool success = 1;
+  string stdout = 2;
+  string stderr = 3;
+  int32 exit_code = 4;
+}
+
+message SSHCheckRequest {
+  string target_host = 1;
+  int32 target_port = 2; // Default 22
+}
+message SSHCheckResponse {
+  bool reachable = 1;
+  string message = 2;
+}
+
+message DiskStatusRequest {
+  string path = 1; // Default / or DB path
+}
+message DiskStatusResponse {
+  double usage_percent = 1;
+  bool is_full = 2; // e.g., > 95%
+  string message = 3;
+}
+
+message PluginRequest {
+  string plugin_name = 1;
+  string action = 2;
+  map<string, string> params = 3;
+}
+
+message PluginResponse {
+  bool success = 1;
+  string message = 2;
+  map<string, string> result = 3;
+}
+
+// ExecStream runs a whitelisted shell command (same whitelist/arg validation
+// as ExecuteShell) and streams stdout/stderr lines.
+message ExecStreamRequest {
+  string command = 1;
+  repeated string args = 2;
+  int32 timeout_seconds = 3;
+}
+
+message ExecStreamLine {
+  enum Channel {
+    STDOUT = 0;
+    STDERR = 1;
+  }
+  Channel channel = 1;
+  string line = 2;
+  // Set only on the final line; 0 = success.
+  int32 exit_code = 3;
+  bool final = 4;
+}
+
+// FetchFile downloads one file from source_url and stores it under target_dir
+// (jailed). It is written to a temp file, verified against sha256, then renamed
+// atomically to filename.
+message FetchFileRequest {
+  string source_url = 1;  // https recommended; http only to allowlisted hosts
+  string target_dir = 2;  // must resolve inside the allowed root
+  string filename = 3;    // final file name (no path separators)
+  string sha256 = 4;      // optional expected hash (verified when non-empty)
+  int64 max_bytes = 5;    // hard size cap (0 = use server default)
+  int64 limit_kbps = 6;   // optional download rate limit
+}
+
+message FetchProgress {
+  int64 loaded = 1;
+  int64 total = 2;
+  int64 speed_bps = 3;
+  string phase = 4;       // start/downloading/verifying/done/error
+  bool done = 5;
+  string message = 6;     // final path on success, error text on failure
+}
+
+// BinlogTailRequest asks the agent to stream local binlog bytes beyond the
+// given start position. file+pos is used when start_gtid is empty.
+message BinlogTailRequest {
+  string start_file = 1;   // e.g. mysql-bin.000003
+  int64 start_pos = 2;     // offset within start_file
+  string start_gtid = 3;   // caller executed GTID (logging / boundary only)
+  int64 max_bytes = 4;     // hard cap of total payload; 0 = agent default
+
+  // 以下字段由 Manager 从节点表 meta_data 读取并随请求下发，
+  // agent 本地不再配置 binlog_rescue。
+  bool enabled = 5;              // 该节点是否允许 binlog 尾部救援（权威开关）
+  string binlog_dir = 6;         // DB 读不到 @@log_bin_basename 时的兜底目录
+  string binlog_basename = 7;    // 兜底 binlog 基础名
+  repeated string access_roots = 8; // 允许读 binlog 的目录白名单（读 jail）
+}
+
+message BinlogChunk {
+  bytes data = 1;          // raw binlog bytes
+  string file = 2;         // binlog file the bytes belong to
+  int64 pos = 3;           // next offset after this chunk within file
+  bool done = 4;           // final chunk marker
+}
+
+// BinlogRescueChunk carries one piece of a rescued binlog fragment. The
+// final message sets done plus the verification target.
+message BinlogRescueChunk {
+  bytes data = 1;
+  bool done = 2;
+  string target_gtid = 3;  // gtid_executed expected to be contained afterwards
+  string session_id = 4;   // temp file name stem (safe charset only)
+
+  // Manager 从候选节点在 meta_data 的 rescue_* 字段读取后下发。
+  bool enabled = 5;        // 是否允许在本候选节点应用救援片段（权威开关）
+  int64 max_bytes = 6;     // 片段载荷上限；0 = agent 默认 1 GiB
+}
+
+message BinlogRescueResult {
+  bool success = 1;
+  string message = 2;
+  string gtid_executed = 3;
+}
+
+// EndpointHookRequest runs the cluster's VIP/domain hook. Inputs are passed
+// strictly as command-line arguments (no env/stdin).
+message EndpointHookRequest {
+  string command = 1;          // status|stop|start
+  string cluster = 2;
+  string endpoint_type = 3;    // none|vip|domain
+  string endpoint = 4;
+  string old_master = 5;       // host:port
+  string new_master = 6;       // host:port
+  // When non-empty, sync the hook executable from this URL before running.
+  string sync_url = 7;
+  string sha256 = 8;
+  int32 timeout_seconds = 9;
+}
+
+message EndpointHookResult {
+  bool success = 1;            // exit 0 + JSON parsed + success=true
+  string message = 2;          // hook message or error text
+  string current_master = 3;    // parsed from hook JSON (host:port)
+  int32 exit_code = 4;
+  string stdout = 5;
+  string stderr = 6;
+}

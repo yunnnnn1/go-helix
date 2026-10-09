@@ -1,0 +1,1225 @@
+:root {
+  --bg: #f4f6fb;
+  --surface: #ffffff;
+  --border: #e5e9f2;
+  --text: #1f2733;
+  --muted: #7a869a;
+  --primary: #3b5bdb;
+  --primary-dark: #3450c2;
+  --green: #12b76a;
+  --orange: #f79009;
+  --amber: #d97706;
+  --red: #f04438;
+  --shadow: 0 1px 3px rgba(16, 24, 40, .08), 0 1px 2px rgba(16, 24, 40, .04);
+  --shadow-lg: 0 12px 32px rgba(16, 24, 40, .16);
+  --radius: 12px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { height: 100%; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  /* 单一应用外壳：顶栏 / 标签栏 / 内容区三行，锁定在一屏内，页面本身
+     永不滚动，内部面板各自滚动。 */
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  overflow: hidden;
+}
+
+/* ---------- Top bar ---------- */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.logo {
+  width: 42px; height: 42px;
+  display: grid; place-items: center;
+  font-size: 22px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--primary), #6d7df5);
+  border-radius: 11px;
+}
+.brand h1 { font-size: 17px; font-weight: 700; }
+.brand p { font-size: 12px; color: var(--muted); }
+
+.topbar-right { display: flex; align-items: center; gap: 14px; }
+
+.badge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.badge-muted { background: #eef1f7; color: var(--muted); }
+.badge-green { background: #e7f8f0; color: var(--green); }
+.badge-red { background: #feeceb; color: var(--red); }
+.badge-blue { background: #e9edff; color: var(--primary); }
+.badge-orange { background: #fef3e2; color: var(--orange); }
+
+/* Toggle switch */
+.switch { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+.switch em { font-style: normal; font-size: 12px; color: var(--muted); }
+.switch input { display: none; }
+.switch .slider {
+  width: 38px; height: 22px;
+  background: #cfd6e6;
+  border-radius: 999px;
+  position: relative;
+  transition: background .2s;
+}
+.switch .slider::after {
+  content: "";
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 18px; height: 18px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform .2s;
+  box-shadow: 0 1px 2px rgba(0,0,0,.2);
+}
+.switch input:checked + .slider { background: var(--primary); }
+.switch input:checked + .slider::after { transform: translateX(16px); }
+
+/* Stacked switches inside the topology policy modal. */
+.switch-block {
+  padding: 9px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.switch-block:last-of-type { border-bottom: none; }
+.switch-block em { color: var(--text); font-size: 13px; }
+
+/* ---------- Buttons ---------- */
+.btn {
+  border: 1px solid transparent;
+  background: var(--primary);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, border-color .15s;
+}
+.btn:hover { background: var(--primary-dark); }
+.btn-ghost {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text);
+}
+.btn-ghost:hover { background: #f1f4fa; }
+.btn-danger { background: var(--red); }
+.btn-danger:hover { background: #d93226; }
+.btn-sm { padding: 5px 11px; font-size: 12px; }
+.btn-xs {
+  padding: 3px 9px;
+  font-size: 11px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ---------- Tabs ---------- */
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 14px 24px 0;
+}
+.tab {
+  border: none;
+  background: transparent;
+  padding: 9px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 9px 9px 0 0;
+  border-bottom: 2px solid transparent;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+/* ---------- Content ---------- */
+.content {
+  flex: 1;
+  min-height: 0;
+  padding: 16px 24px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.view { display: none; }
+/* 当前视图填满内容区：工具栏固定高度，其余区域内部滚动。 */
+.view.active {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.toolbar h2 { flex: 0 0 auto; font-size: 16px; }
+
+/* Per-cluster topology policy row, at the top of an expanded card. */
+.card-policy {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #fafbfe;
+  border-bottom: 1px solid var(--border);
+}
+.card-policy-label {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.card-policy-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.card-policy-badges .badge {
+  font-size: 11px;
+  white-space: nowrap;
+}
+/* Keep the edit button pinned to the right edge instead of being
+   pushed to a new line when the badges wrap. */
+.card-policy > .btn {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+/* Topology policy rendered as three stacked "label + switch" rows. */
+.card-topology {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+.card-topology-title {
+  padding-bottom: 4px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--border);
+}
+.topology-row {
+  justify-content: space-between;
+  padding: 4px 2px;
+}
+.topology-row-label {
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+/* Cluster priority pill (in card head) */
+.card-priority { cursor: pointer; font-size: 11px; padding: 3px 9px; }
+
+/* Priority editor modal */
+.priority-options { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; }
+.endpoint-type-options { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; }
+.endpoint-value-field { margin-top: 4px; transition: opacity .15s; }
+.priority-option {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px;
+  cursor: pointer; font-size: 13px;
+}
+.priority-option:hover { border-color: var(--primary); background: var(--bg); }
+.priority-dot, .prio-dot {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 32px; padding: 2px 8px; border-radius: 999px;
+  font-size: 11px; font-weight: 700;
+}
+.prio-P0 { background: #feeceb; color: var(--red); }
+.prio-P1 { background: #fef3e2; color: var(--orange); }
+.prio-P2 { background: #e9edff; color: var(--primary); }
+.prio-P3 { background: #eef1f7; color: var(--muted); }
+
+/* Manager cluster tier bar */
+.raft-tier-bar { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+
+/* Cluster cards */
+.cluster-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 16px;
+  align-content: start;
+  /* Each card keeps its natural height; without this the grid stretches a
+     collapsed card to match an expanded card in the same row, leaving a large
+     blank area that looks like an empty expanded panel. */
+  align-items: start;
+  overflow: auto;
+  padding-right: 6px;
+}
+.cluster-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.cluster-head {
+  padding: 16px 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.cluster-head h3 { font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.cluster-meta { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.chev { color: var(--muted); transition: transform .2s; font-size: 13px; }
+.cluster-card.open .chev { transform: rotate(180deg); }
+
+.cluster-body { display: none; border-top: 1px solid var(--border); }
+.cluster-card.open .cluster-body { display: block; }
+
+.cluster-actions {
+  display: flex; flex-wrap: nowrap; gap: 6px;
+  padding: 12px 14px;
+  background: #fafbfe;
+  border-top: 1px solid var(--border);
+}
+/* 5 个操作按钮同一行：允许收缩、缩小水平内边距，避免「恢复复制」被挤到第二行。 */
+.cluster-actions .btn {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding-left: 9px;
+  padding-right: 9px;
+}
+
+/* Node mini table: wrapped so wide content scrolls instead of being clipped. */
+.node-table-wrap { overflow-x: auto; }
+.node-table { width: 100%; border-collapse: collapse; }
+.node-table th, .node-table td {
+  text-align: left;
+  padding: 9px 12px;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--border);
+}
+.node-table th { color: var(--muted); font-weight: 600; background: #fafbfe; }
+.node-table tr:last-child td { border-bottom: none; }
+.addr { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+.role-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.role-master { background: #e9edff; color: var(--primary); }
+.role-slave { background: #e7f8f0; color: var(--green); }
+.role-other { background: #eef1f7; color: var(--muted); }
+
+/* Card + generic table */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.table-wrap { overflow: auto; }
+.table { width: 100%; border-collapse: collapse; }
+.table th, .table td {
+  text-align: left;
+  padding: 12px 16px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.table th { background: #fafbfe; color: var(--muted); font-weight: 600; }
+.table tr:last-child td { border-bottom: none; }
+
+/* Manager 视图：唯一的 .card 填满剩余高度，表格在卡片内部滚动。 */
+#view-managers .card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+#view-managers .table-wrap { flex: 1; min-height: 0; }
+
+.loading, .empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 40px;
+}
+
+.muted { color: var(--muted); font-size: 12.5px; }
+code {
+  background: #f1f4fa;
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-size: 12px;
+}
+
+/* ---------- Modal ---------- */
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 20, 35, .45);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.modal-mask.show { display: flex; }
+.modal {
+  background: var(--surface);
+  border-radius: 14px;
+  width: 440px;
+  max-width: calc(100vw - 32px);
+  padding: 22px 24px;
+  box-shadow: var(--shadow-lg);
+}
+.modal h3 { font-size: 16px; margin-bottom: 10px; }
+.modal p { margin-bottom: 14px; }
+.input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+}
+.input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59,91,219,.12); }
+.field { display: block; margin-top: 6px; }
+.field span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+/* ---------- Toast ---------- */
+.toast-box {
+  position: fixed;
+  right: 22px;
+  top: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 60;
+}
+.toast {
+  min-width: 260px;
+  max-width: 380px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  border-left: 4px solid var(--primary);
+  font-size: 13px;
+  animation: toastIn .2s ease;
+}
+.toast-success { border-left-color: var(--green); }
+.toast-error { border-left-color: var(--red); }
+.toast-info { border-left-color: var(--primary); }
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- 审计视图：分段切换 ---------- */
+.segmented {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+.seg-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 5px 14px;
+  font-size: 13px;
+  line-height: 1.2;
+  color: var(--muted);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.seg-btn:hover { color: var(--text); }
+.seg-btn.active {
+  background: var(--surface);
+  color: var(--primary);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .12);
+}
+/* 分段筛选：内部下拉与输入保持间距。
+   显式 display 会覆盖 hidden 默认的 display:none，故 [hidden] 时复位，
+   否则非当前分段的筛选行会错误地留在工具栏上。 */
+.seg-filters {
+  align-items: center;
+  gap: 8px;
+}
+.seg-filters:not([hidden]) {
+  display: inline-flex;
+}
+.mono-cell {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+/* ---------- 切换日志视图 ---------- */
+/* filters 可增长填满标题右侧，min-width:0 让它能收缩并触发内部换行，
+   否则固定项会被挤出视口（汇聚开关曾因此不可见）。 */
+.toolbar-filters {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.toolbar-filters .btn,
+.toolbar-filters .input { flex: 0 0 auto; height: 36px; border-radius: 8px; }
+.toolbar-filters .input { padding: 0 10px; font-size: 13px; }
+/* “切换日志”页的集群过滤输入框固定宽度，不随窗口弹性撑满（之前
+   flex:1 导致它过长）。 */
+.toolbar-filters #switchlogFilter {
+  flex: 0 0 160px;
+  width: 160px;
+  min-width: 160px;
+}
+.toolbar-filters .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+}
+
+/* Native <select> on macOS ignores the set height while it keeps the native
+   appearance, which is why the dropdown looked taller than the button. Use a
+   neutral appearance with a custom arrow so both controls share one height. */
+.toolbar-filters select.input {
+  -webkit-appearance: none;
+  appearance: none;
+  padding-right: 32px;
+  cursor: pointer;
+  background-color: var(--surface);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+}
+/* 返回按钮与类型下拉共享同一固定宽度，两者严格对齐；选项已改为
+   等长的中文短标签，该宽度可完整容纳。 */
+.toolbar-filters #btnBackToClusters,
+.toolbar-filters #switchlogKind { width: 106px; }
+
+.input-sm { height: 34px; padding: 0 10px; font-size: 13px; }
+
+.switchlog-layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(300px, 380px) 1fr;
+  gap: 16px;
+}
+/* 左右两栏均填满剩余高度，各自内部滚动。 */
+.switchlog-list-card,
+.switchlog-content-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.switchlog-list-card .table-wrap { flex: 1; min-height: 0; }
+.switchlog-content-head { flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.log-pre {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 14px 16px;
+  overflow: auto;
+  background: #0f172a;
+  color: #d6e0f0;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+.switchlog-row { cursor: pointer; }
+.switchlog-row.selected { background: #eef2ff; }
+.switchlog-row:hover { background: #f5f7ff; }
+
+.live-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--green);
+}
+.live-tag::before {
+  content: "";
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #fff;
+  animation: liveBlink 1.2s infinite;
+}
+@keyframes liveBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .25; }
+}
+
+@media (max-width: 900px) {
+  .switchlog-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+/* ---------- 集群拓扑 ---------- */
+.topo { padding: 6px 0 12px; overflow-x: auto; }
+.topo-tree,
+.topo-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+}
+/* One connector color used by lines and arrowhead, so the arrow reads as the
+   tip of the same stroke rather than a detached shape. */
+.topo-children { --conn: #b8c2d4; padding-top: 32px; position: relative; }
+
+/* Per-child direction arrow: a small, soft chevron sitting on the vertical
+   stub just above the slave card. Sized to match the 1.5px connector. */
+.topo-arrow {
+  position: absolute;
+  top: 25px;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  transform: translateX(-50%) rotate(45deg);
+  border-right: 1.5px solid var(--conn);
+  border-bottom: 1.5px solid var(--conn);
+  background: var(--bg);
+  pointer-events: none;
+}
+.topo-tree > li { text-align: center; position: relative; }
+.topo-roots { display: flex; justify-content: center; gap: 12px; }
+
+.topo-children > li {
+  text-align: center;
+  position: relative;
+  padding: 32px 16px 0;
+}
+/* vertical connector from the parent's horizontal line down to the node;
+   it stops above the arrowhead so the chevron remains crisp. */
+.topo-children > li::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  height: 27px;
+  border-left: 1.5px solid var(--conn);
+}
+/* horizontal connector shared by siblings */
+.topo-children > li::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  border-top: 1.5px solid var(--conn);
+}
+.topo-children > li:first-child::after { left: 50%; width: 50%; }
+.topo-children > li:last-child::after { left: 0; width: 50%; }
+.topo-children > li:only-child::after { display: none; }
+
+/* node cards */
+.topo-node {
+  display: inline-block;
+  min-width: 156px;
+  padding: 9px 14px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  text-align: left;
+}
+.topo-node-master { border-color: var(--primary); background: #eef2ff; }
+.topo-node-intermediate { border-color: var(--amber, #d97706); background: #fff7ed; }
+.topo-node-other { border-style: dashed; }
+.topo-node.is-offline { opacity: .55; }
+.topo-node-head { display: flex; align-items: center; gap: 7px; }
+.topo-node-role {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .6px;
+  color: var(--muted);
+}
+.topo-node-master .topo-node-role { color: var(--primary); }
+.topo-node-addr {
+  font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 3px 0 2px;
+}
+.topo-node-meta { font-size: 11px; color: var(--muted); }
+.topo-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.dot-on { background: var(--green); box-shadow: 0 0 0 3px rgba(18,183,106,.18); }
+.dot-off { background: var(--red); box-shadow: 0 0 0 3px rgba(240,68,56,.18); }
+.topo-flat {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  padding: 6px 0;
+}
+
+/* ---------- 切换日志：跨节点汇聚开关 ---------- */
+.check-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.check-inline input { cursor: pointer; accent-color: var(--primary); }
+
+/* ---------- 回滚预检预览 ---------- */
+.pf-banner {
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.pf-banner-ok { background: #e7f8f0; color: #0f9d58; }
+.pf-banner-bad { background: #fdecea; color: #d93025; }
+
+.pf-record {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.pf-nodes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.pf-node {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  background: var(--surface);
+}
+.pf-node-missing { border-style: dashed; background: #fafafa; }
+.pf-node-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+.pf-node-addr {
+  font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+  font-weight: 600;
+  font-size: 12.5px;
+  margin-bottom: 2px;
+}
+
+.pf-ok { color: #0f9d58; font-weight: 700; }
+.pf-miss { color: #d93025; font-weight: 700; }
+
+.pf-checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+.pf-checks li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 2px;
+  font-size: 12.5px;
+  border-bottom: 1px solid #f0f2f7;
+}
+.pf-check-name { font-weight: 600; white-space: nowrap; }
+.pf-check-detail { color: var(--muted); font-size: 12px; word-break: break-all; }
+
+/* Advisory (non-blocking) preflight checks: muted, the rollback self-heals them. */
+.pf-check-advisory { opacity: .72; }
+.pf-check-advisory .pf-check-name { font-weight: 500; }
+.pf-check-advisory .pf-icon { color: var(--muted) !important; }
+
+/* ---------- 切换日志：内容头存活指示 ---------- */
+.head-right { display: inline-flex; align-items: center; gap: 10px; }
+.updated-time { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+/* Friendly content head: "集群 cluster1 · 计划切换 · 2026-10-05" */
+.log-head-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* ============================================================= */
+/* 响应式密度档位：由 app.js 的 applyResponsive 按视口宽度切换。     */
+/* 三行 Grid 外壳始终存在，这里只调整间距/字号/排列，保证任何尺寸    */
+/* 下内容都在同一布局内、不溢出、关键控件（汇聚开关）始终可见。       */
+/* ============================================================= */
+
+/* ---------- 紧凑：< 760px ---------- */
+body.compact .content { padding: 12px 14px; }
+body.compact .topbar { padding: 10px 14px; }
+body.compact .brand p { display: none; }
+body.compact .tabs { padding: 10px 14px 0; gap: 2px; }
+body.compact .tab { padding: 8px 12px; font-size: 13px; }
+
+/* 标题与过滤区换行后，过滤区占满整行、左对齐，确保每个控件可见。 */
+body.compact .toolbar { gap: 8px; margin-bottom: 10px; }
+body.compact .toolbar-filters {
+  flex-basis: 100%;
+  justify-content: flex-start;
+}
+/* 集群卡片在窄窗口用更小的最小列宽，尽量保持两列、放不下则一列。 */
+body.compact .cluster-grid {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+/* 回滚预检的两张节点卡片由并排改为上下。 */
+body.compact .pf-nodes { grid-template-columns: 1fr; }
+
+/* ---------- 超紧凑：< 480px ---------- */
+body.ultra-compact .topbar-right { gap: 8px; }
+body.ultra-compact .logo { width: 34px; height: 34px; font-size: 18px; }
+body.ultra-compact .brand h1 { font-size: 15px; }
+/* 隐藏“自动刷新”文字，只留开关，腾出顶栏空间。 */
+body.ultra-compact .switch em { display: none; }
+/* 过滤输入框在超窄窗口撑满整行。 */
+body.ultra-compact .toolbar-filters #switchlogFilter {
+  width: auto;
+  flex: 1 1 100%;
+}
+body.ultra-compact .cluster-grid {
+  grid-template-columns: 1fr;
+}
+body.ultra-compact .log-pre,
+body.ultra-compact .node-table th,
+body.ultra-compact .node-table td { font-size: 11.5px; }
+
+/* ---------------- 主机工具 ---------------- */
+.hosttools-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+.hosttool-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.hosttool-head {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.hosttool-head h3 { margin: 0 0 2px; }
+.hosttool-form { padding: 14px 16px; }
+/* 多控件横向排布。 */
+.field-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+.field-grow { flex: 1 1 auto; min-width: 0; }
+.field-row .field { flex: 0 1 auto; min-width: 0; }
+.hosttool-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.hosttool-output {
+  min-height: 220px;
+  max-height: 420px;
+}
+@media (max-width: 900px) {
+  .hosttools-grid { grid-template-columns: 1fr; }
+  .field-row { flex-wrap: wrap; }
+}
+
+/* ---------- 主题切换按钮（白/黑共用） ---------- */
+.btn-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  padding: 0;
+}
+.btn-icon svg { width: 16px; height: 16px; display: block; }
+
+/* ============================================================= */
+/*  NEON TECH — 霓虹科技主题覆盖层                                */
+/*  纯增量、可回退：删除本区块即恢复浅色默认主题。                  */
+/*  仅覆盖配色 / 质感 / 动效，布局、栅格、类名与交互逻辑保持不变。   */
+/* ============================================================= */
+
+:root[data-theme="dark"] {
+  /* 深空底色 + 高饱和霓虹强调色（深色下提亮以保证对比度） */
+  --bg: #05070f;
+  --surface: rgba(13, 21, 42, .6);
+  --border: rgba(125, 165, 255, .15);
+  --text: #e8f0ff;
+  --muted: #8b9cc7;
+
+  --primary: #5b8dff;
+  --primary-dark: #3f6fe0;
+  --green: #34d399;
+  --orange: #fbbf24;
+  --amber: #fbbf24;
+  --red: #fb7185;
+
+  --shadow: 0 10px 34px rgba(0, 0, 0, .48);
+  --shadow-lg: 0 24px 64px rgba(0, 0, 0, .62), 0 0 42px rgba(56, 130, 246, .14);
+  --radius: 14px;
+
+  /* 玻璃拟态与霓虹光参数 */
+  --glass: rgba(13, 21, 42, .6);
+  --glass-strong: rgba(9, 15, 32, .82);
+  --glass-border: rgba(130, 170, 255, .18);
+  --cyan: #38bdf8;
+  --violet: #8b5cf6;
+  --glow: 0 0 22px rgba(56, 189, 248, .35);
+}
+
+/* ---------- 动态背景：深空渐变 + 光晕 + 网格 ---------- */
+:root[data-theme="dark"] {
+  /* html 元素自身（:root）的底色 */
+  & { background: #04060d; }
+
+  & body { background: transparent; }
+
+  & body::before {
+  content: "";
+  position: fixed; inset: 0; z-index: -2; pointer-events: none;
+  background:
+    radial-gradient(620px circle at 12% -8%, rgba(56, 189, 248, .20), transparent 46%),
+    radial-gradient(720px circle at 96% -4%, rgba(139, 92, 246, .22), transparent 46%),
+    radial-gradient(820px circle at 50% 118%, rgba(59, 130, 246, .16), transparent 52%);
+}
+  & body::after {
+  content: "";
+  position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(125, 165, 255, .05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(125, 165, 255, .05) 1px, transparent 1px);
+  background-size: 42px 42px;
+  -webkit-mask-image: radial-gradient(circle at 50% 26%, #000, transparent 82%);
+  mask-image: radial-gradient(circle at 50% 26%, #000, transparent 82%);
+  }
+}
+
+/* Dark-theme-only component overrides (explicit block; previously these were
+   nested by an accidentally-unterminated rule above). */
+:root[data-theme="dark"] {
+/* ---------- 玻璃拟态容器 ---------- */
+.topbar, .card, .cluster-card, .modal, .toast, .pf-node, .topo-node,
+.switchlog-content-head, .hosttool-head {
+  background-color: var(--glass);
+  border-color: var(--glass-border);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
+}
+.topbar { box-shadow: 0 8px 30px rgba(0, 0, 0, .4), inset 0 1px 0 rgba(160, 200, 255, .08); }
+
+/* ---------- 标题：渐变流光文字 ---------- */
+.brand h1, .toolbar h2 {
+  background: linear-gradient(90deg, var(--cyan), #a78bfa 55%, var(--cyan));
+  background-size: 220% auto;
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+  animation: textFlow 6s linear infinite;
+}
+
+/* ---------- Logo ---------- */
+.logo {
+  background: linear-gradient(135deg, var(--cyan), var(--violet));
+  box-shadow: 0 0 18px rgba(56, 189, 248, .55), inset 0 1px 0 rgba(255, 255, 255, .3);
+}
+
+/* ---------- Tabs：霓虹下划线 + 发光 ---------- */
+.tab:hover { color: #cfe0ff; }
+.tab.active {
+  color: var(--cyan);
+  border-bottom-color: var(--cyan);
+  text-shadow: 0 0 14px rgba(56, 189, 248, .7);
+}
+
+/* ---------- 分段切换：选中态青色微光 ---------- */
+.seg-btn.active {
+  color: var(--cyan);
+  box-shadow: 0 0 14px rgba(56, 189, 248, .25);
+}
+
+/* ---------- Buttons：渐变 + 发光 + 悬浮 ---------- */
+.btn {
+  background: linear-gradient(135deg, #3b82f6, #6366f1);
+  box-shadow: 0 4px 16px rgba(59, 130, 246, .35), inset 0 1px 0 rgba(255, 255, 255, .18);
+  transition: transform .16s ease, box-shadow .16s ease, background .16s ease;
+}
+.btn:hover {
+  background: linear-gradient(135deg, #4d93ff, #7c7bff);
+  box-shadow: 0 8px 26px rgba(79, 140, 255, .55);
+  transform: translateY(-1px);
+}
+.btn:active { transform: translateY(0); }
+.btn-danger {
+  background: linear-gradient(135deg, #f43f5e, #e11d48);
+  box-shadow: 0 4px 16px rgba(244, 63, 94, .35), inset 0 1px 0 rgba(255, 255, 255, .18);
+}
+.btn-danger:hover {
+  background: linear-gradient(135deg, #fb5d78, #f43f5e);
+  box-shadow: 0 8px 26px rgba(244, 63, 94, .55);
+}
+.btn-ghost {
+  background: rgba(125, 165, 255, .06);
+  border-color: var(--glass-border);
+  color: var(--text);
+  box-shadow: none;
+}
+.btn-ghost:hover { background: rgba(56, 189, 248, .14); box-shadow: 0 0 18px rgba(56, 189, 248, .22); }
+
+/* ---------- Badges / Role tags：半透明霓虹 ---------- */
+.badge-muted { background: rgba(139, 156, 199, .12); color: var(--muted); border: 1px solid rgba(139, 156, 199, .28); }
+.badge-green, .role-slave { background: rgba(52, 211, 153, .13); color: var(--green); border: 1px solid rgba(52, 211, 153, .32); }
+.badge-blue, .role-master { background: rgba(56, 189, 248, .13); color: var(--cyan); border: 1px solid rgba(56, 189, 248, .34); }
+.badge-red { background: rgba(251, 113, 133, .13); color: var(--red); border: 1px solid rgba(251, 113, 133, .34); }
+.badge-orange { background: rgba(251, 191, 36, .13); color: var(--orange); border: 1px solid rgba(251, 191, 36, .32); }
+.role-other { background: rgba(139, 156, 199, .1); color: var(--muted); border: 1px solid rgba(139, 156, 199, .24); }
+
+/* ---------- 表单控件：深色玻璃 + 聚焦光晕 ---------- */
+.input {
+  background: rgba(7, 12, 26, .66);
+  border-color: var(--glass-border);
+  color: var(--text);
+}
+.input::placeholder { color: #5f7099; }
+.input:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, .18), 0 0 18px rgba(56, 189, 248, .28);
+}
+.input option { background: #0c142a; color: var(--text); }
+& code { background: rgba(56, 189, 248, .12); color: #bfe9ff; border: 1px solid rgba(56, 189, 248, .2); }
+
+/* 下拉箭头改为青色。深色 .input 规则用 background 简写（且经 :root[attr]
+   提升后优先级更高）会把 background-repeat 重置为 repeat、position 重置，
+   故此处必须显式补回 no-repeat 与右侧定位，否则箭头被平铺成整排图案。 */
+.toolbar-filters select.input {
+  background-color: var(--glass-strong);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2338bdf8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+}
+
+/* Toggle switch */
+.switch .slider { background: #283454; }
+.switch input:checked + .slider {
+  background: linear-gradient(135deg, var(--cyan), #6366f1);
+  box-shadow: 0 0 12px rgba(56, 189, 248, .5);
+}
+
+/* ---------- 表格：玻璃表头 + 行悬浮/选中 ---------- */
+.node-table th, .table th { background: rgba(96, 140, 230, .09); color: #9db2dd; }
+.cluster-actions { background: rgba(96, 140, 230, .06); }
+.card-policy { background: rgba(96, 140, 230, .06); }
+.node-table tbody tr:hover, .table tbody tr:hover { background: rgba(125, 165, 255, .07); }
+.switchlog-row.selected { background: rgba(56, 130, 246, .18); }
+.switchlog-row:hover { background: rgba(125, 165, 255, .1); }
+
+/* ---------- 集群卡片：悬浮上浮 + 描边发光 ---------- */
+.cluster-card, .hosttool-card { transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
+.cluster-card:hover {
+  border-color: rgba(120, 180, 255, .4);
+  box-shadow: 0 0 0 1px rgba(80, 140, 255, .12), 0 20px 46px rgba(0, 0, 0, .52), 0 0 30px rgba(56, 130, 255, .16);
+  transform: translateY(-3px);
+}
+.cluster-card.open { border-color: rgba(56, 189, 248, .32); box-shadow: var(--shadow), 0 0 26px rgba(56, 189, 248, .12); }
+.cluster-card.open .cluster-body { animation: bodyIn .3s ease; }
+
+/* ---------- 拓扑：发光连线 + Master 节点 ---------- */
+.topo-children { --conn: rgba(56, 189, 248, .55); }
+.topo-node { background: var(--glass-strong); }
+.topo-node-master {
+  border-color: var(--cyan);
+  background: rgba(56, 189, 248, .1);
+  box-shadow: 0 0 22px rgba(56, 189, 248, .24);
+}
+.topo-node-master .topo-node-role { color: var(--cyan); }
+.topo-node-intermediate {
+  border-color: var(--amber, #f59e0b);
+  background: rgba(245, 158, 11, .12);
+}
+.topo-node-intermediate .topo-node-role { color: var(--amber, #f59e0b); }
+/* 状态点呼吸脉冲 */
+.dot-on {
+  background: var(--green);
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, .18), 0 0 10px rgba(52, 211, 153, .8);
+  animation: dotPulse 2s ease-in-out infinite;
+}
+.dot-off { background: var(--red); box-shadow: 0 0 0 3px rgba(251, 113, 133, .18), 0 0 10px rgba(251, 113, 133, .7); }
+
+/* ---------- 预检：深色 Banner / 缺省节点 ---------- */
+.pf-banner-ok { background: rgba(52, 211, 153, .13); color: var(--green); border: 1px solid rgba(52, 211, 153, .3); }
+.pf-banner-bad { background: rgba(251, 113, 133, .13); color: var(--red); border: 1px solid rgba(251, 113, 133, .3); }
+.pf-node-missing { background: rgba(7, 12, 26, .5); }
+.pf-checks li { border-bottom-color: rgba(125, 165, 255, .08); }
+.pf-ok { color: var(--green); }
+.pf-miss { color: var(--red); }
+
+/* ---------- 日志输出区：更通透 + 内发光 ---------- */
+.log-pre {
+  background: #080d1c;
+  color: #cfe0ff;
+  box-shadow: inset 0 1px 0 rgba(125, 165, 255, .1);
+}
+.live-tag {
+  background: linear-gradient(135deg, #10b981, #06b6d4);
+  box-shadow: 0 0 14px rgba(16, 185, 129, .5);
+}
+
+/* ---------- 弹窗遮罩 ---------- */
+.modal-mask { background: rgba(3, 6, 16, .62); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+
+/* ---------- 霓虹滚动条 ---------- */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(#3b82f6, #6366f1);
+  border: 2px solid transparent; background-clip: content-box; border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--cyan); background-clip: content-box; }
+}
+
+/* ---------- 全局：视图切换淡入（白/黑共用） ---------- */
+.view.active { animation: viewIn .28s ease; }
+@keyframes viewIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* ---------- 全局：暗色主题引用的关键帧（置于嵌套块外） ---------- */
+@keyframes textFlow { to { background-position: 220% center; } }
+@keyframes bodyIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dotPulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(52, 211, 153, .18), 0 0 8px rgba(52, 211, 153, .6); }
+  50% { box-shadow: 0 0 0 6px rgba(52, 211, 153, .08), 0 0 18px rgba(52, 211, 153, .95); }
+}
+
+/* ---------- 告警通知视图 ---------- */
+.notify-wrap { display: flex; flex-direction: column; gap: 16px; max-width: 1040px; }
+
+/* Status + test-result cards need inner padding (the base .card has none by
+   itself) so their rows and hints stay inside the rounded box. */
+.notify-status-card { padding: 14px 16px; }
+
+.notify-status-head {
+  display: flex; align-items: center; gap: 12px;
+  flex-wrap: wrap;
+}
+.notify-status-head .btn { margin-left: auto; }
+.notify-master-dot { width: 12px; height: 12px; border-radius: 50%; flex: none; background: var(--muted); }
+.notify-master-dot.on { background: var(--green); box-shadow: 0 0 0 4px rgba(18, 183, 106, .15); }
+.notify-master-dot.off { background: var(--muted); }
+
+/* Hint must wrap within the card instead of overflowing horizontally. */
+#notifyMasterHint {
+  margin: 10px 0 0;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* The bare .card holding the last test result. */
+.notify-wrap > .card { padding: 14px 16px; }
+.notify-wrap > .card h3 { margin: 0 0 10px; font-size: 15px; }
+
+.notify-channel-list {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px;
+}
+.notify-channel {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden;
+}
+.notify-channel.is-on { border-color: var(--green); }
+.notify-channel-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.notify-channel-head .btn { margin-left: auto; }
+.notify-channel-body { padding: 10px 14px 14px; display: flex; flex-direction: column; gap: 8px; }
+.notify-row { display: flex; gap: 12px; font-size: 13px; }
+.notify-row-key { color: var(--muted); width: 96px; flex: none; }
+.notify-row-val { word-break: break-all; }
+
+.notify-test-results { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.notify-test-results, .notify-test-row { overflow-wrap: anywhere; }
+.notify-test-row { font-size: 13px; padding-left: 18px; position: relative; }
+.notify-test-row.ok { color: var(--green); }
+.notify-test-row.ok::before { content: "✓"; position: absolute; left: 0; }
+.notify-test-row.bad { color: var(--red); }
+.notify-test-row.bad::before { content: "✕"; position: absolute; left: 0; }
+
+.notify-edit-fields { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+textarea.input { resize: vertical; font-family: inherit; }
+
+/* ---------- 尊重减少动态偏好 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+

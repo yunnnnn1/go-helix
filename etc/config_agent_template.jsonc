@@ -1,0 +1,137 @@
+/* =============================================================================
+ * Go-Helix —— Agent 配置模板（带参数说明）
+ *
+ * 说明：
+ *   1. 本文件为 JSONC（JSON + // 注释），仅供「参考」。程序使用标准
+ *      encoding/json，不能直接加载注释；实际使用时请【删除所有注释】
+ *      另存为 config_agent.json。
+ *   2. 标注约定：[必填] 必须提供；[可选] 缺省时取「默认」值。
+ *   3. 部署形态：每台 MySQL 主机部署【一个】Agent，本模板为 Master 主机
+ *      (10.0.0.1) 的配置；Slave 主机(10.0.0.2)结构相同，仅 report_ip、
+ *      priority（及单机调试时的 bind 端口）不同。
+ *   4. 三种数据库账户物理隔离、职责互斥，不得混用：
+ *      app_user=探活(只读) / repl=仅主从复制 / manager=切换与 GTID(特权)。
+ * ========================================================================== */
+{
+  /* [必填] 与所有 Manager / Agent 节点一致的 Bearer 密钥。 */
+  "auth_token": "secret-token-123",
+
+  /* ============================= Agent 主体 ============================ */
+  "agent": {
+
+    /* [可选] Agent 日志目录；留空 = stdout。默认 ""(stdout)。 */
+    "log_dir": "/var/log/github.com/yunnnnn1/go-helix/agent",
+
+    /* [可选] Agent 操作总超时（也作为流式命令默认超时）。默认 "10s"。 */
+    "timeout": "10s",
+
+    /* [可选] 心跳上报周期。默认 "5s"。 */
+    "heartbeat_interval": "5s",
+
+    /* ---- ① 探活账号（业务，只读）---- */
+    "default_db_user": "app_user",          // [必填] Ping / SHOW VARIABLES / SHOW REPLICA STATUS
+    "default_db_password": "***",           // [必填] 探活口令；自动发现时也用它连实例
+
+    /* ---- ② 复制账号（仅用于主从复制）----
+       Agent 从不用它建立客户端连接；其凭据只会被写入
+       CHANGE REPLICATION SOURCE 供从库 IO 线程认证。 */
+    "replication_db_user": "repl",          // [必填] 复制账号
+    "replication_db_password": "***",       // [必填] 复制口令
+
+    /* ---- ③ 管理账号（切换 / GTID，特权）----
+       Failover/Switchover 全部管理操作、KillConnections、
+       gtid_sync 订阅 binlog 与回放事务均使用此账号。 */
+    "manager_db_user": "manager",           // [必填] 管理账号
+    "manager_db_password": "***",           // [必填] 管理口令
+
+    /* [可选] instances 为空（自动发现）时要发现的数据库类型；
+       留空 = "mysql"。 */
+    "auto_discover_type": "mysql",
+
+    /* [可选] FetchFile 安全文件拉取【唯一允许写入】的目录白名单（jail）。
+       target_dir 必须解析到其中某个目录内；留空(默认)时拉取功能关闭。 */
+    "file_fetch_roots": ["/data00/packages"],
+
+    /* ---- 插件共享的数据库连接池（所有插件/实例复用）---- */
+    "plugin_pool": {
+      "max_open_conns": 10,        // [可选] 每个目标的最大打开连接数，默认 10
+      "max_idle_conns": 2,         // [可选] 最大空闲连接数，默认 2
+      "idle_time": "10m",          // [可选] 空闲物理连接存活上限，默认 "10m"
+      "max_entries": 64,           // [可选] 缓存 *sql.DB 的 LRU 槽位上限，默认 64
+      "reclaim_interval": "5m",    // [可选] 空闲槽位回收频率，默认 "5m"
+      "reclaim_after": "30m"       // [可选] 槽位空闲超过该时长即淘汰，默认 "30m"
+    },
+
+    /* ---- MHA 风格 binlog 尾部救援（特权路径，默认关闭）----
+       已不再从本配置读取：信息全部收敛在节点表 meta_data——
+       节点上报路径 binlog_dir/binlog_basename（@@log_bin_basename），
+       运维策略 rescue_enabled/rescue_access_roots/rescue_max_bytes，
+       由 Manager 在切换时读取并随 RPC 下发。
+       运维侧目前通过 SQL 维护（控制台编辑入口暂未提供）。 */
+
+    /* ---- VIP/域名切换 Hook 的本地可执行程序（路径绝不来自网络请求）---- */
+    "endpoint_hooks": {
+      "run_user": "gohelix",             // [可选] 降权执行用户，主机须存在；空=禁用 Hook
+      "roots": ["/opt/github.com/yunnnnn1/go-helix/hooks"],  // [可选] 限制 Hook 可执行文件所在目录(jail)
+      "hooks": [
+        {
+          "cluster": "cluster1",        // [可选] 该 Hook 对应的集群名
+          "path": "/opt/github.com/yunnnnn1/go-helix/hooks/endpoint_hook" // [可选] 本地可执行文件绝对路径
+        }
+      ]
+    },
+
+    /* ---- 受管实例列表 ----
+       【留空 = 自动发现（生产默认）】：扫描本机 mysqld，用
+       default_db_user 探活、Agent 端口由方言推导（MySQL: db_port+20000）。
+       【填写 = 手动模式（调试/本演示采用）】：显式声明实例。 */
+    "instances": [
+      {
+        /* [必填-手动] 本实例 Agent gRPC 监听地址。
+           多机每台一个可用 0.0.0.0:23307；单机调试多实例需错开(23307/23308)。 */
+        "bind_addr": "0.0.0.0:23307",
+
+        /* [必填-手动] 上报给 MetaDB 的节点 IP（其他节点可见）；
+           Master 主机填 10.0.0.1，Slave 主机填 10.0.0.2。 */
+        "report_ip": "10.0.0.1",
+
+        /* [可选] 集群名；留空则由 MetaDB 按复制拓扑自动分配(cluster1…)。 */
+        "cluster_name": "cluster1",
+
+        "zone": "zone-a",        // [可选] 可用区
+        "region": "region1",     // [可选] 地域
+        "idc": "dc-1",           // [可选] 机房
+        "priority": 100,         // [可选] 节点级选主权重（越大越优；Slave 示例 90）
+        "env": "prod",           // [可选] 环境标记 prod/staging
+
+        /* 该实例对应的本地数据库连接信息 */
+        "db": {
+          "type": "mysql",                 // [可选] 数据库类型，默认 mysql
+          "host": "127.0.0.1",             // [必填-手动] 本地 DB 主机（Agent 与 DB 同机）
+          "port": 3307,                    // [必填-手动] 本地 DB 端口
+
+          /* —— 以下为「按实例覆盖」，留空则用 agent 顶层三类账号 —— */
+          "user": "",                      // [可选] 覆盖探活账号（对应 default_db_user）
+          "password": "",                  // [可选] 覆盖探活口令
+          "replication_user": "",          // [可选] 覆盖复制账号
+          "replication_password": "",      // [可选] 覆盖复制口令
+          "manager_user": "",              // [可选] 覆盖管理账号
+          "manager_password": ""           // [可选] 覆盖管理口令
+        }
+      }
+    ]
+  },
+
+  /* ======================== 元数据库（MetaDB）=========================
+     Agent 用此连接上报心跳；与 Manager 的 datacenter 指向同一 MetaDB。 */
+  "datacenter": {
+    "type": "mysql",                  // [可选] mysql(默认) | sqlite
+    "host": "10.0.0.3",               // [必填-mysql] MetaDB 主机
+    "port": 3306,                     // [可选] 默认 3306
+    "user": "mha_admin",              // [必填-mysql] MetaDB 账号
+    "password": "***",                // [必填-mysql] MetaDB 口令
+    "dbname": "dc",                   // [必填-mysql] 元数据库名
+    "path": "/var/lib/github.com/yunnnnn1/go-helix/metadata.db", // [必填-sqlite] 文件库路径（二选一）
+    "timeout": "5s"                   // [可选] 连接/握手超时，默认 "5s"
+  }
+}
