@@ -1,3 +1,9 @@
+// Copyright (c) 2026 Go-Helix Authors
+//
+// This file is part of go-helix.
+// Licensed under the MIT License. See the LICENSE file in the project root
+// for the full license text.
+
 // Package db 包含项目中共享的、与具体数据库类型无关的抽象。
 package db
 

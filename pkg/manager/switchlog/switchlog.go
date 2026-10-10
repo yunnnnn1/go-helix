@@ -1,3 +1,9 @@
+// Copyright (c) 2026 Go-Helix Authors
+//
+// This file is part of go-helix.
+// Licensed under the MIT License. See the LICENSE file in the project root
+// for the full license text.
+
 // Package switchlog 提供对 Manager 写入 {logDir}/failover 和
 // {logDir}/switchover 的切换日志文件的只读访问。它为控制台的"当前切换"
 // 实时视图以及历史切换日志列表提供支撑。

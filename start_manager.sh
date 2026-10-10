@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Copyright (c) 2026 Go-Helix Authors
+#
+# This file is part of go-helix.
+# Licensed under the MIT License. See the LICENSE file in the project root
+# for the full license text.
+
 # Start Manager Cluster Script
 
 # Kill previous manager instances

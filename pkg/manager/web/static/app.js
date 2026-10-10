@@ -1,3 +1,9 @@
+// Copyright (c) 2026 Go-Helix Authors
+//
+// This file is part of go-helix.
+// Licensed under the MIT License. See the LICENSE file in the project root
+// for the full license text.
+
 /* go-helix 管理控制台前端逻辑（原生 JS，无框架依赖）
  *
  * 视图结构：所有可复用片段在 index.html 中以 <template> 声明，本文件通过

@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Copyright (c) 2026 Go-Helix Authors
+#
+# This file is part of go-helix.
+# Licensed under the MIT License. See the LICENSE file in the project root
+# for the full license text.
+
 # Build script for Manager and Agent.
 # The project ships on Linux, so this always cross-compiles static Linux
 # x86_64 binaries (CGO disabled) with fixed names: bin/manager, bin/agent

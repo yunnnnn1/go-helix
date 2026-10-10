@@ -1,3 +1,9 @@
+-- Copyright (c) 2026 Go-Helix Authors
+--
+-- This file is part of go-helix.
+-- Licensed under the MIT License. See the LICENSE file in the project root
+-- for the full license text.
+
 -- =============================================================================
 -- go-helix DataCenter 元数据表 meta_data
 -- 用途：存储所有被管数据库节点的身份、角色、复制拓扑边与运行时状态。

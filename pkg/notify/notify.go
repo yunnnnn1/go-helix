@@ -1,3 +1,9 @@
+// Copyright (c) 2026 Go-Helix Authors
+//
+// This file is part of go-helix.
+// Licensed under the MIT License. See the LICENSE file in the project root
+// for the full license text.
+
 // Package notify 将告警事件投递到面向运维人员的渠道：基于 SMTP 的邮件，以及
 // 企业微信 / 钉钉 / 飞书的群机器人 webhook。
 //

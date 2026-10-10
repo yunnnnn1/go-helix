@@ -1,3 +1,9 @@
+// Copyright (c) 2026 Go-Helix Authors
+//
+// This file is part of go-helix.
+// Licensed under the MIT License. See the LICENSE file in the project root
+// for the full license text.
+
 // Package metrics 提供一个极小、无第三方依赖的指标注册表，输出 Prometheus
 // 文本展示格式。它刻意不依赖 prometheus/client_golang：go-helix 只需要少数几个
 // Counter/Gauge，而将注册表保持为仅使用原子操作可维持无 CGO、最小化的构建。

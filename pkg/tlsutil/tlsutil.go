@@ -1,3 +1,9 @@
+// Copyright (c) 2026 Go-Helix Authors
+//
+// This file is part of go-helix.
+// Licensed under the MIT License. See the LICENSE file in the project root
+// for the full license text.
+
 // Package tlsutil 集中处理内部 gRPC/HTTP 的双向 TLS：加载证书、构造
 // *tls.Config，以及为“连接 Agent”的拨号点提供统一的凭据选项。
 //
