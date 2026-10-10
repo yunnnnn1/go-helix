@@ -36,6 +36,10 @@ type ManagerConfig struct {
 	// 之前提升新主库。
 	Fencing FencingConfig `json:"fencing"`
 
+	// TLS 配置 Manager 对外/对 Agent 的内部 gRPC 与 HTTP 双向加密
+	// （默认关闭，向后兼容）。
+	TLS TLSConfig `json:"tls"`
+
 	// MetricsEnabled 控制 Prometheus /metrics 端点是否开启。
 	MetricsEnabled *bool `json:"metrics_enabled"`
 
@@ -304,6 +308,9 @@ type AgentConfig struct {
 	// EndpointHooks 配置集群端点（VIP/域名）的可执行程序。
 	EndpointHooks EndpointHooksConfig `json:"endpoint_hooks"`
 
+	// TLS 配置 Agent gRPC 服务端的双向加密（默认关闭）。
+	TLS TLSConfig `json:"tls"`
+
 	// 调试/覆盖模式：手动指定实例，而非使用自动发现
 	Instances []AgentInstanceConfig `json:"instances"`
 }
@@ -437,6 +444,36 @@ const (
 	// 告警后仍然进行提升。
 	FencingModeBestEffort = "best_effort"
 )
+
+// TLSConfig 配置内部 gRPC/HTTP 的双向 TLS（mTLS）。默认 Enabled=false
+// （明文，向后兼容）。CertFile/KeyFile 为本端证书；CAFile 为校验对端
+// 证书使用的根证书；启用 mTLS 时三者都需提供。
+type TLSConfig struct {
+	Enabled  bool   `json:"enabled"`
+	CertFile string `json:"cert_file"`
+	KeyFile  string `json:"key_file"`
+	CAFile   string `json:"ca_file"`
+}
+
+// Validate 校验启用 TLS 时证书文件字段完整。
+func (t TLSConfig) Validate() error {
+	if !t.Enabled {
+		return nil
+	}
+	missing := ""
+	switch {
+	case t.CertFile == "":
+		missing = "cert_file"
+	case t.KeyFile == "":
+		missing = "key_file"
+	case t.CAFile == "":
+		missing = "ca_file"
+	}
+	if missing != "" {
+		return fmt.Errorf("tls enabled but %s is not configured", missing)
+	}
+	return nil
+}
 
 // FencingConfig 配置提升前的隔离门禁。
 type FencingConfig struct {

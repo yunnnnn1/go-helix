@@ -11,9 +11,9 @@ import (
 	log "github.com/yunnnnn1/go-helix/pkg/logging"
 	"github.com/yunnnnn1/go-helix/pkg/logic"
 	"github.com/yunnnnn1/go-helix/pkg/proto"
+	"github.com/yunnnnn1/go-helix/pkg/tlsutil"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -106,8 +106,11 @@ func (m *Monitor) dialAgentNode(node *datacenter.Node) (proto.DBAgentClient, fun
 	}
 	addr := fmt.Sprintf("%s:%d", node.Host, agentPort)
 
-	var opts []grpc.DialOption
-	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	transport, err := tlsutil.ClientDialOption()
+	if err != nil {
+		return nil, nil, fmt.Errorf("build agent tls: %w", err)
+	}
+	opts := []grpc.DialOption{transport}
 	if cfg := config.Get(); cfg != nil && cfg.AuthToken != "" {
 		opts = append(opts, grpc.WithUnaryInterceptor(func(ctx context.Context, method string, req, reply interface{},
 			cc *grpc.ClientConn, invoker grpc.UnaryInvoker, callOpts ...grpc.CallOption) error {

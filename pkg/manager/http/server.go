@@ -30,8 +30,23 @@ type Server struct {
 
 	httpServer *http.Server
 
+	// tlsCert/tlsKey 非空时以 HTTPS 提供服务（双向校验由内部 gRPC 侧
+	// 负责；HTTP 控制面默认明文，启用 manager.tls 后切到 TLS）。
+	tlsCert string
+	tlsKey  string
+
 	// startTime 作为 uptime（运行时长）指标的锚点。
 	startTime time.Time
+}
+
+// SetTLS 在启用 manager.tls 时配置 HTTPS 证书，Start 将据此使用
+// ListenAndServeTLS。
+func (s *Server) SetTLS(c config.TLSConfig) error {
+	if err := c.Validate(); err != nil {
+		return err
+	}
+	s.tlsCert, s.tlsKey = c.CertFile, c.KeyFile
+	return nil
 }
 
 func NewServer(m *monitor.Monitor, r *raft.Node) *Server {
@@ -164,9 +179,23 @@ func (s *Server) Start(addr string) error {
 		staticHandler.ServeHTTP(w, r)
 	})
 
+	// 超时设置：ReadHeaderTimeout 防 Slowloris；ReadTimeout 限制读取完整
+	// 请求；IdleTimeout 限制空闲连接。不设 WriteTimeout，以免掐断
+	// NDJSON 流式响应。
 	s.httpServer = &http.Server{
-		Addr:    addr,
-		Handler: rootHandler,
+		Addr:              addr,
+		Handler:           recoveryHandler(rootHandler),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+
+	if s.tlsCert != "" {
+		log.Printf("API Server + Web console listening on %s (TLS)", addr)
+		if err := s.httpServer.ListenAndServeTLS(s.tlsCert, s.tlsKey); err != nil && err != http.ErrServerClosed {
+			return err
+		}
+		return nil
 	}
 
 	log.Printf("API Server + Web console listening on %s", addr)
@@ -174,6 +203,20 @@ func (s *Server) Start(addr string) error {
 		return err
 	}
 	return nil
+}
+
+// recoveryHandler 捕获下游 handler 的 panic，记录日志并返回 500，避免
+// 单个意外 panic 导致整个 Manager 进程崩溃。
+func recoveryHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Printf("[Recovery] %s panic: %v", r.URL.Path, rec)
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
 }
 
 // Shutdown 优雅地停止 API 服务器，在 ctx 超时之前等待所有在途请求处理

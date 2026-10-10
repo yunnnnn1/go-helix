@@ -121,6 +121,11 @@ func main() {
 
 	// 4. 启动 HTTP API 服务器
 	apiServer := managerapi.NewServer(m, r)
+	if cfg.Manager.TLS.Enabled {
+		if err := apiServer.SetTLS(cfg.Manager.TLS); err != nil {
+			log.Fatalf("Fatal: configure API TLS: %v", err)
+		}
+	}
 	go func() {
 		log.Printf("API server listening on %s (advertised as %s)", listenAddr, apiAddr)
 		if err := apiServer.Start(listenAddr); err != nil {

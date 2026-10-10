@@ -14,9 +14,9 @@ import (
 	log "github.com/yunnnnn1/go-helix/pkg/logging"
 	"github.com/yunnnnn1/go-helix/pkg/logic"
 	"github.com/yunnnnn1/go-helix/pkg/proto"
+	"github.com/yunnnnn1/go-helix/pkg/tlsutil"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -71,8 +71,12 @@ func (m *Monitor) handleNodeInvestigation(job *investigationJob) {
 		conn = cachedConn.(*grpc.ClientConn)
 	} else {
 		// 添加鉴权 Token
-		var opts []grpc.DialOption
-		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		transport, tErr := tlsutil.ClientDialOption()
+		if tErr != nil {
+			log.Printf("Failed to build tls for %s: %v", agentAddr, tErr)
+			return
+		}
+		opts := []grpc.DialOption{transport}
 
 		if cfg := config.Get(); cfg != nil && cfg.AuthToken != "" {
 			opts = append(opts, grpc.WithUnaryInterceptor(func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
@@ -300,8 +304,11 @@ func (m *Monitor) secondaryProbePort(targetHost, clusterName string, targetPort 
 		}
 		agentAddr := net.JoinHostPort(n.Host, strconv.Itoa(int(agentPort)))
 
-		var opts []grpc.DialOption
-		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		transport, tErr := tlsutil.ClientDialOption()
+		if tErr != nil {
+			continue // TLS 配置无效，尝试下一个从库
+		}
+		opts := []grpc.DialOption{transport}
 
 		if cfg := config.Get(); cfg.AuthToken != "" {
 			opts = append(opts, grpc.WithUnaryInterceptor(func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {

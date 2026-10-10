@@ -65,7 +65,7 @@ graph TD
 
 **代码结构**：`cmd/{agent,manager}` 入口；`pkg/agent`（gRPC 服务、`backend/` 实例后端、`plugins/` 插件、binlog 救援、流式命令/文件拉取）；`pkg/manager`（`http/` API、`monitor/` 检测调度、`web/` 控制台、`switchlog/`）；`pkg/logic`（切换决策与执行框架，MySQL 实现在 `mysql/`）；`pkg/db`（`drivers/` 方言、`ops/` 健康检查）；`pkg/datacenter`（门面 `Client`、`MetaStore` 接口与 MySQL/SQLite/内存三后端）；另有 `pkg/config`、`pkg/raft`、`pkg/metrics`、`pkg/notify`、`pkg/logging`、`pkg/proto`。
 
-**关键特性**：元数据多后端（MySQL/SQLite/内存，行为一致）；流式命令执行（白名单、逐行回传、断连即杀）；安全文件拉取（目录 jail、文件名/SHA256 校验、SSRF 防护、原子改名、限速）；集群优先级 P0–P3 与 Manager 分层；业务端点（VIP/域名）经语言无关 Hook 联动；多渠道告警（邮件/企业微信/钉钉/飞书）；Fencing 防脑裂；免鉴权 `/health` `/ready` `/metrics`。
+**关键特性**：元数据多后端（MySQL/SQLite/内存，行为一致）；流式命令执行（白名单、逐行回传、断连即杀）；安全文件拉取（目录 jail、文件名/SHA256 校验、SSRF 防护、原子改名、限速）；集群优先级 P0–P3 与 Manager 分层；业务端点（VIP/域名）经语言无关 Hook 联动；多渠道告警（邮件/企业微信/钉钉/飞书）；Fencing 防脑裂；Raft FSM 持久化切换记录与审计日志（含来源 IP 追踪）；免鉴权 `/health` `/ready` `/metrics`。
 
 ---
 
@@ -109,7 +109,7 @@ graph TD
 
 ### 2.3 Manager：故障检测与切换调度
 
-**Raft 高可用**：HashiCorp Raft 3 节点，仅 Leader 检测/切换，内置 KV FSM。启动免参数 `autoReconcile`：老成员从本地恢复；新节点读 `raft_peers` 逐个 `POST /join`；全新集群仅固定种子 `raft_peers[0]` 执行 Bootstrap（防多节点各自建群）。Leader 支持 `RemoveServer`（`POST /leave`）。非 Leader 对写请求自动反向代理到 Leader。
+**Raft 高可用**：HashiCorp Raft 3 节点，仅 Leader 检测/切换；FSM 在 KV 之外另维护切换记录与审计日志两类复制集合（见 [2.11](#211-raft-fsm切换记录与审计日志)）。启动免参数 `autoReconcile`：老成员从本地恢复；新节点读 `raft_peers` 逐个 `POST /join`；全新集群仅固定种子 `raft_peers[0]` 执行 Bootstrap（防多节点各自建群）。Leader 支持 `RemoveServer`（`POST /leave`）。非 Leader 对写请求自动反向代理到 Leader。
 
 **Monitor 工作池**：并发 Worker 默认 10；周期扫描过期 Master（默认 60s）；每 Worker 独立调查；gRPC 连接缓存复用。
 
@@ -264,6 +264,32 @@ Step4 提升：STOP/RESET REPLICA ALL → 启用 SemiSync Master → read_only=0
 | `GET /metrics` | Prometheus 文本 | 默认 200，`metrics_enabled=false` 时 404 |
 
 指标（无第三方依赖 `pkg/metrics`）：`helix_up`、`helix_is_leader`、`helix_raft_applied_index`、`helix_clusters_total`、`helix_failover_total{result}`、`helix_notify_events_total{channel,result}`、`helix_goroutines`、`helix_uptime_seconds`。保持 CGO-free，将来可替换为官方 prometheus 库。
+
+### 2.11 Raft FSM：切换记录与审计日志
+
+FSM 在 KV 之外维护两类**只追加（append-only）复制集合**，随 Raft 日志复制到全部 Manager 节点，任意节点可本地只读查询、无需转发 Leader（[fsm_records.go](pkg/raft/fsm_records.go)）。
+
+| 集合 | 单条结构 | 条数上限 | 超限处理 |
+|------|---------|---------|---------|
+| 切换摘要 `switches` | `SwitchRecord` | 1000 | 环形截断最旧条目 |
+| 审计日志 `audits` | `AuditEntry` | 10000 | 环形截断最旧条目 |
+
+- **日志条目复用同一 Raft 通道**：经顶层 `type` 区分——缺省（空）=历史 KV、`switch`=切换摘要、`audit`=审计日志；损坏条目返回 error 而非 panic。
+- **确定性序号**：`Seq` 由 FSM 在应用时按顺序分配（`nextSwitchSeq`/`nextAuditSeq`），不由提交方指定，因此在 Raft 确定的相同应用顺序下各节点序号一致。
+- **版本化快照**：快照写出为带 `version` 的信封（当前 v1，含 KV + 两类集合及序号），`Restore` 兼容历史“裸 KV map”旧格式。
+- **切换摘要定位**：是元数据库 `switch_history` 行的 Raft 镜像（字段含 cluster/operation/recover_mode/old_master/new_master/analysis_code/result/执行节点）。**回滚仍以 MySQL 为事实源**，Raft 镜像仅用于控制台快速、高可用查阅。
+
+**审计日志四分类**（与控制台筛选一一对应）：
+
+| Category | 覆盖操作（Action 示例） |
+|----------|----------------------|
+| `lifecycle` | `failover.start/end`、`switchover.start/end`、`recover.<mode>.start/end` |
+| `config` | `config/topology.save`、`config/priority.set`、`config/notify.save` |
+| `cluster` | `cluster/join`、`cluster/leave`、`cluster/register` |
+| `security` | `security/agent.exec`、`security/agent.fetch` |
+
+- 每条含 `category/action/cluster/target/result/source_ip/node/detail`；`result` 为 started/success/failed/aborted（围栏中止单独标 aborted）；`source_ip` 从 HTTP `RemoteAddr` 提取，`node` 为执行 Manager 的 RaftID。
+- 审计统一由 **Leader 提交**（`Node.EmitAudit`，best-effort：失败仅记录、不影响主操作）；Follower 上的敏感 / 变更请求先转发到 Leader，故审计点不会在 Follower 上重复产生。
 
 ---
 
@@ -426,15 +452,15 @@ curl -s -X POST -H "$AUTH" -H "Content-Type: application/json" \
 
 ## 5. HTTP API 参考
 
-共 **23 个端点**：20 个需鉴权 + 3 个免鉴权（`/health` `/ready` `/metrics`）。以路由注册 `pkg/manager/http/server.go` 为准。
+共 **25 个端点**：22 个需鉴权 + 3 个免鉴权（`/health` `/ready` `/metrics`）。以路由注册 `pkg/manager/http/server.go` 为准。
 
 **鉴权**：请求头 `Authorization: Bearer <auth_token>`，服务端 `crypto/subtle.ConstantTimeCompare` 常量时间比较，缺失/错误 401。**内容类型**：除 `/switchlog/content`（text/plain）和两个主机工具（`application/x-ndjson`）外均为 `application/json`。
 
 | 类别 | 端点 | Leader 规则 |
 |------|------|------------|
 | 免鉴权 | `GET /health` `/ready` `/metrics` | 不转发、不要 token |
-| 任意节点 | `GET /clusters` `/status` `/leader` `/raft/nodes` `/raft/priority` `/recover/preflight` `/config/topology` `/config/priority` `/config/notify`、`POST /config/notify` `/switchlogs/aggregate` `/agent/exec-stream` `/agent/fetch-file` | 读元数据/fan-out/代理 Agent |
-| Follower 转发 Leader | `POST /failover` `/switchover` `/recover` `/config/priority` `/cluster/register`、`PUT /config/notify`、`GET /switchlogs` `/switchlog/content` | 无 Leader 503，转发失败 502 |
+| 任意节点 | `GET /clusters` `/status` `/leader` `/raft/nodes` `/raft/priority` `/recover/preflight` `/config/topology` `/config/priority` `/config/notify` `/switchlogs/aggregate` `/switch-records` `/audit-logs`、`POST /config/notify` | 读元数据/fan-out/本地已复制状态 |
+| Follower 转发 Leader | `POST /failover` `/switchover` `/recover` `/config/priority` `/cluster/register` `/agent/exec-stream` `/agent/fetch-file`、`PUT /config/notify`、`GET /switchlogs` `/switchlog/content` | 无 Leader 503，转发失败 502 |
 | 仅 Leader | `POST /join` `/leave` | 非 Leader 返回 500 |
 
 **状态码**：200 成功 / 400 参数缺失或非法（含节点定位失败、目录越界）/ 401 Token 错 / 404 日志不存在 / 405 方法不允许 / 500 服务端错误或非 Leader 调 join/leave / 502 转发目标不可达 / 503 当前无 Leader。
@@ -544,10 +570,26 @@ Manager 经 `AgentAddrForNode` 解析目标 Agent，经带一元+流式鉴权拦
 | 数据库集群 | 查卡片/拓扑/节点，紧急/计划切换、重建、回滚、恢复复制 |
 | Manager 集群 | 查 Raft 成员、移除节点 |
 | 切换日志 | 过滤、跨节点汇聚、看原文 |
+| 审计日志 | 操作审计 / 切换记录两段切换，按类别、操作过滤 |
 | 主机工具 | 流式执行（可取消）、文件拉取 |
 | 告警通知 | 总开关、查看（脱敏）、逐渠道编辑、测试 |
 
 页面默认 5s 轮询（可关），操作以 Toast 反馈。前端位于 `pkg/manager/web/static/`。
+
+### 5.9 切换记录与审计日志（任意节点只读）
+
+两类数据均随 Raft 复制到每个 Manager，故任意节点直接返回本地副本、不转发 Leader；响应头 `no-store`，均仅支持 `GET`。
+
+- `GET /switch-records?cluster=&operation=&limit=`：返回结构化切换摘要（最新在前）。可按 `cluster`、`operation`（failover/switchover/recover）过滤；响应 `{"records":[...],"count":N}`。
+- `GET /audit-logs?category=&cluster=&limit=`：返回审计日志（最新在前）。可按 `category`（lifecycle/config/cluster/security）、`cluster` 过滤；响应 `{"audit_logs":[...],"count":N}`。
+- `limit` 缺省 100、最大 1000（非法或超界自动钳制）。
+
+```bash
+curl -s -H "Authorization: Bearer secret-token-123" \
+  "http://127.0.0.1:8081/switch-records?limit=50"
+curl -s -H "Authorization: Bearer secret-token-123" \
+  "http://127.0.0.1:8081/audit-logs?category=security"
+```
 
 ---
 
@@ -951,11 +993,12 @@ HA 含四类诉求：本地故障切换、跨城容灾、多地多写、水平�
 - **gRPC 12 方法**：8 一元 + 服务端流 ExecStream/FetchFile/StreamBinlogTail + 客户端流 ApplyBinlogRescue；MySQL Backend 5.x/8.x 适配。
 - **检测/切换**：九种 AnalysisCode 全路由、两层判定（集群初判 + Worker 细化）、LockedSemiSync/Unreachable/DeadMasterAnd(Some)Slaves 检测、冲突+确认双计数、六维选主、中立 ReplicationPosition（GTID/BinlogPos）。
 - **Failover/收敛**：三级数据降级、拓扑保持与中间主恢复、Slave 侧自动发现、拓扑策略按集群 + API、拓扑快照精确回滚、GracefulTakeover（失败回滚）。
-- **Raft/API**：3 节点、免参数自动组网、成员移除、写请求反向代理；20 鉴权 API + 3 免鉴权端点；NDJSON 主机工具代理。
-- **Web 控制台**：embed 同源、集群卡片（策略徽标 + 递归拓扑 + 中间主/隔离标注）、Raft 表、日志页、主机工具页、告警页，5s 轮询。
+- **Raft/API**：3 节点、免参数自动组网、成员移除、写请求反向代理；22 鉴权 API + 3 免鉴权端点；NDJSON 主机工具代理。
+- **Web 控制台**：embed 同源、集群卡片（策略徽标 + 递归拓扑 + 中间主/隔离标注）、Raft 表、日志页、审计日志页（操作审计/切换记录）、主机工具页、告警页，5s 轮询。
 - **插件**：无状态 + 进程内注入凭据、共享 ConnPool（单飞拨号/空闲断/回收/LRU）、gtid_sync 样板（SQLBuilder 防注入、canal 兜底、LIMIT 1）。
 - **元数据**：MetaStore 三后端、SQLite 纯 Go（WAL/busy_timeout/Ensure/UTC 文本）、可移植 SQL 约定；节点 binlog 信息全部收敛进 `meta_data`（路径 `binlog_dir/binlog_basename` 由 Agent 启动即从业务库读出直连上报，策略 `rescue_enabled/rescue_access_roots/rescue_max_bytes` 由运维 SQL 维护）。
 - **安全/运维**：ExecStream 审计与断连杀、FetchFile jail/SSRF/原子改名/限速、Fencing 多视角、多渠道通知（异步/节流/脱敏）、可观测性指标。
+- **Raft FSM 记录 / 审计**：两类只追加复制集合（切换摘要 1000 / 审计日志 10000）、确定性序号与环形截断、版本化快照兼容旧格式；四分类审计（生命周期/配置/集群/安全）含 Source IP，任意节点只读查询（`/switch-records` `/audit-logs`）。
 
 </details>
 
@@ -963,6 +1006,5 @@ HA 含四类诉求：本地故障切换、跨城容灾、多地多写、水平�
 
 | 模块 | 当前 | 期望 |
 |------|------|------|
-| Raft FSM | 简单 KV | 持久化切换记录、审计日志 |
 | 其他数据库类型 | 接口预留 | PostgreSQL / TiDB 实现 |
 | 主机工具执行用户 | Agent 进程身份 | 允许用户白名单 `allowed_exec_users` |

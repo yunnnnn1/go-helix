@@ -13,9 +13,9 @@ import (
 	"github.com/yunnnnn1/go-helix/pkg/logging"
 	"github.com/yunnnnn1/go-helix/pkg/logic"
 	"github.com/yunnnnn1/go-helix/pkg/proto"
+	"github.com/yunnnnn1/go-helix/pkg/tlsutil"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -40,8 +40,11 @@ func getAgentClient(node *datacenter.Node) (*grpc.ClientConn, proto.DBAgentClien
 // dialAgentClient 以标准的传输和鉴权拦截器连接到位于 host:port 的
 // DBAgent。
 func dialAgentClient(addr string) (*grpc.ClientConn, proto.DBAgentClient, error) {
-	var opts []grpc.DialOption
-	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	transport, err := tlsutil.ClientDialOption()
+	if err != nil {
+		return nil, nil, err
+	}
+	opts := []grpc.DialOption{transport}
 
 	if cfg := config.Get(); cfg != nil && cfg.AuthToken != "" {
 		opts = append(opts, grpc.WithUnaryInterceptor(func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, callOpts ...grpc.CallOption) error {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"strings"
 
 	"github.com/yunnnnn1/go-helix/pkg/config"
 
@@ -11,33 +12,49 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func authInterceptor(cfg *config.Config) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		// 若未配置 token，则放行所有请求
-		if cfg == nil || cfg.AuthToken == "" {
-			return handler(ctx, req)
-		}
+// authorize 从入站元数据中校验 Bearer Token。未配置 token 时放行所有
+// 请求；unary 与 stream 拦截器共用本逻辑。
+func authorize(ctx context.Context, cfg *config.Config) error {
+	if cfg == nil || cfg.AuthToken == "" {
+		return nil
+	}
 
-		md, ok := metadata.FromIncomingContext(ctx)
-		if !ok {
-			return nil, status.Errorf(codes.Unauthenticated, "metadata is not provided")
-		}
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return status.Error(codes.Unauthenticated, "metadata is not provided")
+	}
 
-		tokens := md["authorization"]
-		if len(tokens) == 0 {
-			return nil, status.Errorf(codes.Unauthenticated, "authorization token is not provided")
-		}
+	tokens := md["authorization"]
+	if len(tokens) == 0 {
+		return status.Error(codes.Unauthenticated, "authorization token is not provided")
+	}
 
-		token := tokens[0]
-		// 若存在 "Bearer <token>" 格式则进行处理，否则直接使用原始 token
-		if len(token) > 7 && token[:7] == "Bearer " {
-			token = token[7:]
-		}
+	token := tokens[0]
+	if strings.HasPrefix(token, "Bearer ") {
+		token = token[len("Bearer "):]
+	}
+	if token != cfg.AuthToken {
+		return status.Error(codes.Unauthenticated, "invalid token")
+	}
+	return nil
+}
 
-		if token != cfg.AuthToken {
-			return nil, status.Errorf(codes.Unauthenticated, "invalid token")
+func unaryAuthInterceptor(cfg *config.Config) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		if err := authorize(ctx, cfg); err != nil {
+			return nil, err
 		}
-
 		return handler(ctx, req)
+	}
+}
+
+// streamAuthInterceptor 为 ExecStream/FetchFile 等流式 RPC 补齐服务端
+// 鉴权（此前只有 unary 被校验）。
+func streamAuthInterceptor(cfg *config.Config) grpc.StreamServerInterceptor {
+	return func(srv interface{}, ss grpc.ServerStream, _ *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		if err := authorize(ss.Context(), cfg); err != nil {
+			return err
+		}
+		return handler(srv, ss)
 	}
 }

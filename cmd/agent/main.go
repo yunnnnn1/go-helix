@@ -20,8 +20,10 @@ import (
 	_ "github.com/yunnnnn1/go-helix/pkg/db/drivers/sqlite" // 注册 SQLite 驱动与方言
 	log "github.com/yunnnnn1/go-helix/pkg/logging"
 	pb "github.com/yunnnnn1/go-helix/pkg/proto"
+	"github.com/yunnnnn1/go-helix/pkg/tlsutil"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 func main() {
@@ -127,12 +129,22 @@ func main() {
 	var grpcServers []*grpc.Server
 	var serversMu sync.Mutex
 
+	// 启用 mTLS 时一次性加载服务端证书；未启用则为 nil（明文）。
+	var tlsCreds credentials.TransportCredentials
+	if cfg.Agent.TLS.Enabled {
+		tlsConfig, tErr := tlsutil.LoadServerTLS(cfg.Agent.TLS)
+		if tErr != nil {
+			log.Fatalf("Fatal: %v", tErr)
+		}
+		tlsCreds = credentials.NewTLS(tlsConfig)
+	}
+
 	for _, instCfg := range instances {
 		instCfg := instCfg // 捕获循环变量
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			startInstance(ctx, cfg, instCfg, &grpcServers, &serversMu)
+			startInstance(ctx, cfg, instCfg, &grpcServers, &serversMu, tlsCreds)
 		}()
 	}
 
@@ -156,7 +168,7 @@ func main() {
 	log.Println("Agent exited.")
 }
 
-func startInstance(ctx context.Context, globalCfg *config.Config, instCfg config.AgentInstanceConfig, servers *[]*grpc.Server, serversMu *sync.Mutex) {
+func startInstance(ctx context.Context, globalCfg *config.Config, instCfg config.AgentInstanceConfig, servers *[]*grpc.Server, serversMu *sync.Mutex, tlsCreds credentials.TransportCredentials) {
 	agentBind := instCfg.BindAddr
 	if agentBind == "" {
 		log.Printf("Skip instance: BindAddr is empty")
@@ -232,8 +244,21 @@ func startInstance(ctx context.Context, globalCfg *config.Config, instCfg config
 		return
 	}
 
+	// 拦截器链：鉴权（unary/stream）→ panic recovery。
 	var opts []grpc.ServerOption
-	opts = append(opts, grpc.UnaryInterceptor(authInterceptor(globalCfg)))
+	opts = append(opts,
+		grpc.ChainUnaryInterceptor(
+			unaryAuthInterceptor(globalCfg),
+			recoveryUnaryInterceptor(),
+		),
+		grpc.ChainStreamInterceptor(
+			streamAuthInterceptor(globalCfg),
+			recoveryStreamInterceptor(),
+		),
+	)
+	if tlsCreds != nil {
+		opts = append(opts, grpc.Creds(tlsCreds))
+	}
 
 	s := grpc.NewServer(opts...)
 	serversMu.Lock()

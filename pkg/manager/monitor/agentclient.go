@@ -6,9 +6,9 @@ import (
 
 	"github.com/yunnnnn1/go-helix/pkg/config"
 	"github.com/yunnnnn1/go-helix/pkg/proto"
+	"github.com/yunnnnn1/go-helix/pkg/tlsutil"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -24,7 +24,11 @@ func (m *Monitor) AgentClient(agentAddr string) (proto.DBAgentClient, error) {
 		return proto.NewDBAgentClient(conn.(*grpc.ClientConn)), nil
 	}
 
-	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+	transport, err := tlsutil.ClientDialOption()
+	if err != nil {
+		return nil, fmt.Errorf("build agent tls for %s: %w", agentAddr, err)
+	}
+	opts := []grpc.DialOption{transport}
 
 	if cfg := config.Get(); cfg != nil && cfg.AuthToken != "" {
 		token := "Bearer " + cfg.AuthToken
