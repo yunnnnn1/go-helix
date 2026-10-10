@@ -1,6 +1,6 @@
 # Go-Helix (High Availability Manager)
 
-Go-Helix 是基于 Go 的轻量级、高可用数据库管理与自动故障切换系统，支持多种数据库引擎（当前内置 MySQL），提供快速、可靠的故障检测与主从切换。
+Go-Helix 是基于 Go 的轻量级、高可用数据库管理与自动故障切换系统，支持多种数据库引擎（当前内置 MySQL，要求 **MySQL 5.7.8 及以上版本**，含 8.x / 9.x），提供快速、可靠的故障检测与主从切换。
 
 > **文档导航**
 > - 本文件（README）：架构、核心机制、快速开始、运维操作、HTTP API、数据模型、账户权限、配置参考、参数全表。
@@ -106,7 +106,7 @@ graph TD
 
 **心跳要点**：Agent **直连元数据库写入（不经 gRPC/Manager）**，启动当下先立即上报一次（初始化即带入），之后周期默认 5s；上报身份、复制边、机器指标、binlog 物理路径（`@@log_bin_basename`）、中立复制状态（接收/重放线程、半同步、延迟）与类型特有状态（经 `ReplicaStatus.Extra`）；角色由复制边决定（不再仅凭 read_only）。**长连接 + 重连退避（防 Error 1129）**：实例生命周期内复用 `*sql.DB`，探活失败不重建；MySQL 已实现 2s 起、×2、上限 5 分钟的退避，窗口内跳过握手，避免累计 `max_connect_errors`。
 
-**多版本兼容**：8.x/9.x 用 `REPLICA/SOURCE`，低版本用 `SLAVE/MASTER`；`SHOW REPLICA STATUS` 列名经 `firstNonEmpty` 按「`Source_*` 优先、`Master_*` 兜底」取值，兼容只输出 `Source_*` 的衍生内核（如实测 9.5.0）。
+**多版本兼容**（支持 MySQL 5.7.8+）：8.x/9.x 用 `REPLICA/SOURCE`，5.7.x 用 `SLAVE/MASTER`；`SHOW REPLICA STATUS` 列名经 `firstNonEmpty` 按「`Source_*` 优先、`Master_*` 兜底」取值，兼容只输出 `Source_*` 的衍生内核（如实测 9.5.0）。
 
 ### 2.3 Manager：故障检测与切换调度
 
@@ -712,7 +712,7 @@ GRANT INSERT ON mysql.plugin TO 'manager'@'10.%';   -- 可选：半同步插件�
 FLUSH PRIVILEGES;
 ```
 
-权限对应：STOP/START REPLICA→REPLICATION SLAVE；RESET REPLICA→RELOAD；SET read_only/super_read_only/半同步→SYSTEM_VARIABLES_ADMIN；查 PROCESSLIST→PROCESS；KILL→CONNECTION_ADMIN；Canal 订阅→REPLICATION SLAVE；回放→业务库 DML。MySQL 5.7 用 `SUPER` 替代 SYSTEM_VARIABLES_ADMIN/CONNECTION_ADMIN。
+权限对应：STOP/START REPLICA→REPLICATION SLAVE；RESET REPLICA→RELOAD；SET read_only/super_read_only/半同步→SYSTEM_VARIABLES_ADMIN；查 PROCESSLIST→PROCESS；KILL→CONNECTION_ADMIN；Canal 订阅→REPLICATION SLAVE；回放→业务库 DML。MySQL 5.7.8+ 用 `SUPER` 替代 SYSTEM_VARIABLES_ADMIN/CONNECTION_ADMIN。
 
 ### 7.4 mha_admin（元数据库，仅 10.0.0.3:3306）
 
@@ -990,7 +990,7 @@ HA 含四类诉求：本地故障切换、跨城容灾、多地多写、水平�
 
 <details><summary>已实现能力清单（点击展开）</summary>
 
-- **gRPC 12 方法**：8 一元 + 服务端流 ExecStream/FetchFile/StreamBinlogTail + 客户端流 ApplyBinlogRescue；MySQL Backend 5.x/8.x 适配。
+- **gRPC 12 方法**：8 一元 + 服务端流 ExecStream/FetchFile/StreamBinlogTail + 客户端流 ApplyBinlogRescue；MySQL Backend 适配 5.7.8+ / 8.x（含 9.x）。
 - **检测/切换**：九种 AnalysisCode 全路由、两层判定（集群初判 + Worker 细化）、LockedSemiSync/Unreachable/DeadMasterAnd(Some)Slaves 检测、冲突+确认双计数、六维选主、中立 ReplicationPosition（GTID/BinlogPos）。
 - **Failover/收敛**：三级数据降级、拓扑保持与中间主恢复、Slave 侧自动发现、拓扑策略按集群 + API、拓扑快照精确回滚、GracefulTakeover（失败回滚）。
 - **Raft/API**：3 节点、免参数自动组网、成员移除、写请求反向代理；22 鉴权 API + 3 免鉴权端点；NDJSON 主机工具代理。
