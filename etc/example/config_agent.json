@@ -1,0 +1,40 @@
+{
+  "auth_token": "secret-token-123",
+  "agent": {
+    "log_dir": "/tmp/helix_single/agent",
+    "timeout": "10s",
+    "heartbeat_interval": "5s",
+    "default_db_user": "app_user",
+    "default_db_password": "***",
+    "replication_db_user": "repl",
+    "replication_db_password": "***",
+    "manager_db_user": "manager",
+    "manager_db_password": "***",
+    "plugin_pool": {
+      "max_open_conns": 10,
+      "max_idle_conns": 2,
+      "idle_time": "10m",
+      "max_entries": 64,
+      "reclaim_interval": "5m",
+      "reclaim_after": "30m"
+    },
+    "file_fetch_roots": ["/tmp/helix_single/packages"],
+    "instances": [
+      {
+        "bind_addr": "0.0.0.0:23307",
+        "report_ip": "127.0.0.1",
+        "cluster_name": "cluster1",
+        "db": { "type": "mysql", "host": "127.0.0.1", "port": 3307 }
+      }
+    ]
+  },
+  "datacenter": {
+    "type": "mysql",
+    "host": "127.0.0.1",
+    "port": 3306,
+    "user": "mha_admin",
+    "password": "***",
+    "dbname": "dc",
+    "timeout": "5s"
+  }
+}

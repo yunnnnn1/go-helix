@@ -750,16 +750,15 @@ FLUSH PRIVILEGES;
 
 ## 9. 配置参考
 
-> **两套开箱即用的演示配置（位于 [etc/](etc/)）**
-> - [etc/multi/](etc/multi)：**多机物理环境**。MetaDB `10.0.0.3:3306`、Master `10.0.0.1:3307`、Slave `10.0.0.2:3307`，3 节点 Manager（`10.0.1.1/2/3`，raft 7000 / api 8080），每台 MySQL 主机一个 Agent（gRPC 23307）。共 3 manager + 2 agent + 1 初始化 SQL。
-> - [etc/single/](etc/single)：**单机演示环境**。所有进程在一台物理机、端口错开：MetaDB `127.0.0.1:3306`、MySQL `3307/3308`、Agent gRPC `23307/23308`、Manager raft `10001/2/3` 与 HTTP `8081/2/3`；告警默认关闭、目录落在 `/tmp/helix_single/`。
+> **开箱即用的演示配置（位于 [etc/](etc/)）**
+> - [etc/example/](etc/example)：**单机演示环境**。所有进程在一台物理机、端口错开：MetaDB `127.0.0.1:3306`、MySQL `3307/3308`、Agent gRPC `23307/23308`、Manager raft `10001/2/3` 与 HTTP `8081/2/3`；告警默认关闭、目录落在 `/tmp/helix_single/`。共 3 manager + 2 agent 配置 + 1 初始化 SQL。
 >
 > **带逐字段注释的配置模板（参考首选）**
 > - [etc/config_manager_template.jsonc](etc/config_manager_template.jsonc)：Manager 模板，逐字段标注含义、默认值与是否必填。
 > - [etc/config_agent_template.jsonc](etc/config_agent_template.jsonc)：Agent 模板（含三类账户、连接池、端点 Hook；binlog 救援配置已移至元数据 `meta_data`，不在此模板）。
 > - JSONC 含注释仅供参考，使用时删除注释另存为 `.json`。
 >
-> 下面 §9.1 / §9.2 为字段级完整示例（以多机环境为准）。
+> 下面 §9.1 / §9.2 为字段级完整示例（以单机环境为准）。
 
 ### 9.1 Agent（`config_agent.json`）
 
